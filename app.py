@@ -34,9 +34,15 @@ def init_db():
                 next_review DATE NOT NULL,
                 interval INTEGER DEFAULT 0,
                 repetition INTEGER DEFAULT 0,
-                ef FLOAT DEFAULT 2.5
+                ef FLOAT DEFAULT 2.5,
+                card_type TEXT NOT NULL DEFAULT 'recognize'
             )
         ''')
+        # 檢查欄位是否存在，不存在則新增 (確保舊資料庫相容)
+        cursor.execute("PRAGMA table_info(cards)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'card_type' not in columns:
+            cursor.execute("ALTER TABLE cards ADD COLUMN card_type TEXT NOT NULL DEFAULT 'recognize'")
         conn.commit()
 
 # --- SM-2 記憶演算法 ---
@@ -92,7 +98,7 @@ def index():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(id) FROM cards WHERE next_review <= ?", (today,))
         due_count = cursor.fetchone()[0]
-        cursor.execute("SELECT id, front, next_review FROM cards ORDER BY next_review")
+        cursor.execute("SELECT id, front, next_review, card_type FROM cards ORDER BY next_review")
         cards = cursor.fetchall()
     return render_template('index.html', cards=cards, due_count=due_count)
 
@@ -102,13 +108,14 @@ def add_card():
     if request.method == 'POST':
         front = request.form['front']
         back = request.form['back']
+        card_type = request.form['card_type']
         today = datetime.now().date()
         
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO cards (front, back, next_review, interval, repetition, ef) VALUES (?, ?, ?, ?, ?, ?)",
-                (front, back, today, 0, 0, 2.5)
+                "INSERT INTO cards (front, back, next_review, interval, repetition, ef, card_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (front, back, today, 0, 0, 2.5, card_type)
             )
             conn.commit()
         flash(f"成功新增卡片: {front}", "success")
@@ -139,7 +146,8 @@ def study():
         original_chinese = card_data['back']
         
         # 隨機決定是否反轉 (True=看中文猜英文, False=看英文猜中文)
-        is_reverse = random.choice([True, False])
+        # 如果卡片類型是 'spell'，則強制反轉
+        is_reverse = random.choice([True, False]) if card_data['card_type'] == 'recognize' else True
         
         if is_reverse:
             # 反向模式：提供中文 + 首尾字母提示
@@ -245,7 +253,8 @@ def api_next_card():
         original_chinese = card['back']
         
         # --- 隨機中英切換邏輯 ---
-        is_reverse = random.choice([True, False])
+        # 如果卡片類型是 'spell'，則強制反轉 (看中文猜英文)
+        is_reverse = random.choice([True, False]) if card['card_type'] == 'recognize' else True
         
         if is_reverse:
             # 【反向模式：看中文 -> 猜英文】
@@ -327,8 +336,12 @@ def import_cards():
             today = datetime.now().date()
             for row in rows:
                 if len(row) >= 2 and row[0].strip():
-                    conn.execute("INSERT INTO cards (front, back, next_review) VALUES (?, ?, ?)", 
-                                 (row[0].strip(), row[1].strip(), today))
+                    front = row[0].strip()
+                    back = row[1].strip()
+                    # 檢查是否有第三欄，且內容為 'spell'
+                    card_type = 'spell' if len(row) > 2 and row[2].strip().lower() == 'spell' else 'recognize'
+                    conn.execute("INSERT INTO cards (front, back, next_review, card_type) VALUES (?, ?, ?, ?)", 
+                                 (front, back, today, card_type))
                     count += 1
         
         # 封存檔案

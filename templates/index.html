@@ -42,6 +42,9 @@
                 <li style="padding: 8px 0; border-bottom: 1px solid var(--border-color);">
                     {{ card[1] }} 
                     <small style="color: #888;">(下次複習: {{ card[2] }})</small>
+                    {% if card[3] == 'spell' %}
+                        <span style="background-color: var(--purple-color); color: white; font-size: 0.7em; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">拼寫</span>
+                    {% endif %}
                 </li>
             {% endfor %}
         </ul>

@@ -1,14 +1,18 @@
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # 讀取 .env 檔案
 
 # ------------------------------------------------------------------
-# 請將下方的 "YOUR_WEBHOOK_URL" 替換成你的 Discord Webhook 網址
-# 如何取得 Webhook: https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks
+# 請在 .env 檔案中設定你的 Discord Webhook 網址
+# DISCORD_WEBHOOK_URL="your_discord_webhook_url_here"
 # ------------------------------------------------------------------
-WEBHOOK_URL = "YOUR_WEBHOOK_URL"
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 def send_discord_msg(message):
-    if "YOUR_WEBHOOK_URL" in WEBHOOK_URL:
-        print("請打開 discord_bot.py 並設定你的 Webhook URL")
+    if not WEBHOOK_URL:
+        print("警告: DISCORD_WEBHOOK_URL 未在 .env 檔案中設定，已跳過訊息發送。")
         return
     
     data = {

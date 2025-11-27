@@ -1,14 +1,9 @@
-import sqlite3
-import csv
 import os
 import time
 import shutil
 from datetime import datetime
 from discord_bot import send_discord_msg
-
-DB_NAME = "flashcards.db"
-TARGET_FILE = "data.csv"
-PROCESSED_DIR = "imported_files"
+from config import DB_NAME, TARGET_FILE, PROCESSED_DIR
 
 def main():
     if not os.path.exists(PROCESSED_DIR): os.makedirs(PROCESSED_DIR)

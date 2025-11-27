@@ -46,31 +46,31 @@
     cd anki_pi
     ```
 
-2.  **建立並啟用虛擬環境:**
+2.  **安裝依賴:**
+    *(建議先建立並啟用虛擬環境)*
     ```bash
     python -m venv venv
     source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
-
-3.  **安裝依賴:**
-    ```bash
     pip install -r requirements.txt
     ```
-    *(注意: 此專案尚未建立 `requirements.txt`，請根據 `app.py` 中的 `import` 手動安裝，主要需要 `flask` 和 `requests`)*
 
-### 2. 修改配置
+3.  **設定環境變數:**
+    - 複製範例檔案 `.env.example` 為 `.env`。
+      ```bash
+      cp .env.example .env
+      ```
+    - **(重要)** 編輯 `.env` 檔案，填入你自己的設定值：
+      - `SECRET_KEY`: Flask 應用程式的密鑰，請務必更換成一個複雜且隨機的字串。
+      - `OLLAMA_API_URL`: 你運行 Ollama 電腦的 IP 位址和 API 端點。
+      - `DISCORD_WEBHOOK_URL`: 你的 Discord Webhook 網址。
 
-在啟動前，請務必修改以下檔案中的個人化設定：
+4.  **設定應用程式配置 (config.py):**
+    - 編輯 `config.py` 檔案，你可以調整其中的非敏感設定，例如：
+      - `MODEL_NAME`: 你希望 Ollama 使用的模型名稱。
+      - `DB_NAME`, `TARGET_FILE`, `PROCESSED_DIR`: 應用程式使用的資料庫和檔案路徑。
 
-1.  **`app.py`:**
-    - `app.secret_key`: 雖然已預填隨機值，但建議更換成你自己的密鑰。
-    - `OLLAMA_API_URL`: **(重要)** 將 `http://yourip/api/generate` 中的 `yourip` 改成你運行 Ollama 電腦的 **IP 位址**。
-
-2.  **`discord_bot.py`:**
-    - `WEBHOOK_URL`: **(重要)** 將 `"YOUR_WEBHOOK_URL"` 替換成你自己的 Discord Webhook 網址。這將用於發送每日提醒和通知。
-
-3.  **`reminder.sh`:** (用於排程任務)
-    - 將檔案中的 `/path/to/your/project/` 修改為你專案的 **絕對路徑**。
+5.  **修改排程任務腳本 (可選):**
+    - 如果要使用每日提醒功能，請編輯 `reminder.sh`，將檔案中的 `/path/to/your/project/` 修改為你專案的 **絕對路徑**。
 
 ### 3. 啟動應用
 

@@ -2,9 +2,10 @@ import sqlite3
 from datetime import datetime
 from discord_bot import send_discord_msg
 import os
+from config import DB_NAME
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.path.join(BASE_DIR, "flashcards.db")
+DB_NAME = os.path.join(BASE_DIR, DB_NAME) # 確保 DB 路徑正確
 
 def check():
     today = datetime.now().date()

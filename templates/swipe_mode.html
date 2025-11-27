@@ -221,38 +221,43 @@
             
             const card = document.createElement('div');
             card.className = 'flashcard';
+
+            const frontText = document.createElement('div');
+            frontText.className = 'front-text';
+            frontText.innerText = front; // 使用 innerText
+            card.appendChild(frontText);
             
             // 準備發音按鈕 HTML (如果有 speechText 才顯示)
-            let ttsButtonHtml = '';
             if (speechText && speechText.length > 0) {
                 const safeSpeech = speechText.replace(/'/g, "\\'");
-                ttsButtonHtml = `
-                    <button class="tts-btn" onclick="event.stopPropagation(); speak('${safeSpeech}')">
-                        🔊
-                    </button>
-                `;
+                const ttsButton = document.createElement('button');
+                ttsButton.className = 'tts-btn';
+                ttsButton.innerHTML = '🔊';
+                ttsButton.onclick = function(event) {
+                    event.stopPropagation();
+                    speak(safeSpeech);
+                };
+                card.appendChild(ttsButton);
             }
 
-            // 填充卡片內容
-            card.innerHTML = `
-                <div class="front-text">${front}</div>
-                
-                ${ttsButtonHtml}
-
-                <div class="back-content">${back}</div>
-                <div class="click-hint">(點擊翻面)</div>
-            `;
+            const backContent = document.createElement('div');
+            backContent.className = 'back-content';
+            backContent.innerText = back; // 使用 innerText
+            card.appendChild(backContent);
+            
+            const clickHint = document.createElement('div');
+            clickHint.className = 'click-hint';
+            clickHint.innerText = '(點擊翻面)';
+            card.appendChild(clickHint);
 
             // 綁定點擊翻面事件
             card.onclick = function() {
-                const backContent = card.querySelector('.back-content');
-                
                 // 檢查是否已經翻面
                 if (backContent.style.display !== 'block') {
                     // 執行翻面
                     backContent.style.display = 'block';
                     card.classList.add('flipped'); // 改變背景顏色
-                    card.querySelector('.click-hint').style.display = 'none'; // 隱藏提示
+                    clickHint.style.display = 'none'; // 隱藏提示
 
                     // 智慧發音邏輯：
                     // 如果正面沒有發音 (speechText 為空，代表這題是給中文猜英文)

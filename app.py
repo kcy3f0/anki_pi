@@ -8,19 +8,14 @@ import shutil
 import time
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from config import DB_NAME, TARGET_FILE, PROCESSED_DIR, MODEL_NAME
+
+load_dotenv() # 讀取 .env 檔案
 
 app = Flask(__name__)
-app.secret_key = '0a634a5faba1bc708afeb17f85332870'  # 請務必更換成一個複雜且隨機的字串
-DB_NAME = "flashcards.db"
-TARGET_FILE = "data.csv"
-PROCESSED_DIR = "imported_files"
-
-# --- 設定區域 ---
-# 請將下方的 'yourip' 改成你跑 Ollama 那台電腦的 IP
-# 例如: OLLAMA_API_URL = "http://192.168.1.10/api/generate"
-# 如果是在樹莓派本機跑 (不建議)，則用 'http://localhost:11434/api/generate'
-OLLAMA_API_URL = "http://yourip/api/generate" 
-MODEL_NAME = "gemma3:4b-it-qat"  # 根據你電腦安裝的模型名稱修改 (例如: llama3, mistral, gemma2)
+# 從環境變數讀取 SECRET_KEY，如果找不到則使用一個預設值 (僅供開發)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key_should_be_changed')
 
 # --- 資料庫初始化 ---
 def init_db():
@@ -376,4 +371,5 @@ def reset_progress():
 if __name__ == '__main__':
     init_db()
     # host='0.0.0.0' 讓區域網路內其他裝置可以連線
-    app.run(debug=True, host='0.0.0.0', port=10000)
+    # debug=False 在正式環境中是必要的安全措施
+    app.run(debug=False, host='0.0.0.0', port=10000)

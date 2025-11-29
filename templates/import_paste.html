@@ -9,11 +9,17 @@ banana,香蕉
 cat,貓" style="width: 100%; font-family: monospace;"></textarea>
         
         <div style="margin: 1rem 0;">
-            <label>將所有卡片設為:</label>
-            <input type="radio" id="type_recognize" name="card_type" value="recognize" checked>
-            <label for="type_recognize">只要認得</label>
-            <input type="radio" id="type_spell" name="card_type" value="spell" style="margin-left: 1rem;">
-            <label for="type_spell">需要會拼</label>
+            <strong>將所有卡片設為:</strong>
+            <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem;">
+                <span>
+                    <input type="radio" id="type_recognize" name="card_type" value="recognize" checked>
+                    <label for="type_recognize">只要認得</label>
+                </span>
+                <span>
+                    <input type="radio" id="type_spell" name="card_type" value="spell">
+                    <label for="type_spell">需要會拼</label>
+                </span>
+            </div>
         </div>
 
         <button type="submit" class="btn btn-green">匯入</button>

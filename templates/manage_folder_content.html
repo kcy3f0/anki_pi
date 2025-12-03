@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>管理資料夾: 📁 {{ folder.name }}</h3>
+        <a href="{{ url_for('manage_decks') }}" class="btn btn-gray">返回</a>
+    </div>
+
+    <div class="card">
+        <form method="POST" action="{{ url_for('manage_folder_content', folder_id=folder.id) }}">
+            <h4>勾選要包含在此資料夾中的牌組：</h4>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 1.5rem;">
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    {% for deck in all_decks %}
+                    <li style="padding: 10px; border-bottom: 1px solid var(--border-color);">
+                        <label style="display: flex; align-items: center; gap: 15px; width: 100%; cursor: pointer;">
+                            <input 
+                                type="checkbox" 
+                                name="deck_ids" 
+                                value="{{ deck.id }}"
+                                {% if deck.id in associated_deck_ids %}checked{% endif %}>
+                            <span>📇 {{ deck.name }}</span>
+                        </label>
+                    </li>
+                    {% else %}
+                    <li>沒有可用的牌組。</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <a href="{{ url_for('manage_decks') }}" class="btn btn-gray">取消</a>
+                <button type="submit" class="btn btn-primary">儲存變更</button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

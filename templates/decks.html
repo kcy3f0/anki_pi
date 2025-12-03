@@ -5,230 +5,94 @@
         <a href="/" class="btn btn-gray">返回</a>
     </div>
 
-    <!-- Add Folder/Deck Forms -->
+    <!-- Add Forms -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 2rem;">
         <div class="card">
             <h4>新增資料夾</h4>
-            <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; gap: 10px;">
-                <input type="text" name="folder_name" placeholder="輸入新資料夾名稱..." required style="flex-grow: 1; margin: 0;">
-                <button type="submit" name="action" value="add_folder" class="btn btn-green">新增</button>
+            <form method="POST" action="{{ url_for('manage_decks') }}">
+                <input type="hidden" name="action" value="add_folder">
+                <input type="text" name="folder_name" placeholder="輸入新資料夾名稱..." required>
+                <button type="submit" class="btn btn-green">新增資料夾</button>
             </form>
         </div>
         <div class="card">
             <h4>新增牌組</h4>
-            <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; flex-direction: column; gap: 10px;">
-                <select name="folder_id">
-                    <option value="" selected>自動歸入「預設資料夾」</option>
-                    {% for folder in folders %}
-                    <option value="{{ folder.id }}">{{ folder.name }}</option>
-                    {% endfor %}
-                </select>
-                <input type="text" name="deck_name" placeholder="輸入新牌組名稱..." required style="margin: 0;">
-                <button type="submit" name="action" value="add_deck" class="btn btn-primary">新增</button>
+            <form method="POST" action="{{ url_for('manage_decks') }}">
+                <input type="hidden" name="action" value="add_deck">
+                <input type="text" name="deck_name" placeholder="輸入新牌組名稱..." required>
+                <small>新增後，請至資料夾的「管理內容」將它加入。</small>
+                <button type="submit" class="btn btn-primary mt-1">新增牌組</button>
             </form>
         </div>
     </div>
 
-    <!-- Bulk Actions Bar -->
-    <div id="bulk-actions-bar" class="card" style="display: none; margin-bottom: 1rem; flex-direction: row; justify-content: space-between; align-items: center; gap: 20px;">
-        <span id="selection-counter">已選取 0 個項目</span>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <select id="target-folder-select" name="target_folder_id" required>
-                <option value="" disabled selected>選擇目標資料夾...</option>
-                {% for folder in folders %}
-                    <option value="{{ folder.id }}">{{ folder.name }}</option>
-                {% endfor %}
-            </select>
-            <button id="bulk-move-btn" class="btn btn-primary">移動</button>
-        </div>
-    </div>
-
-
-    <!-- Folder & Deck List -->
+    <!-- Folder List -->
     <div class="card mt-2">
-        <h4>現有內容</h4>
-        {% for folder in folders %}
-            <div style="background: var(--bg-color); padding: 15px; border-radius: 8px; margin-bottom: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <input type="checkbox" class="folder-select-all" data-folder-id="{{ folder.id }}" title="全選/取消全選">
-                        <div id="folder-display-{{ folder.id }}">
-                            <h5 style="margin:0; font-size: 1.2rem;">📁 {{ folder.name }}</h5>
-                        </div>
-                    </div>
+        <h4>資料夾列表</h4>
+        <ul style="list-style: none; padding: 0; margin: 0;">
+            {% for folder in folders %}
+            <li style="padding: 10px; border-bottom: 1px solid var(--border-color);">
+                <div id="folder-display-{{ folder.id }}" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">📁 {{ folder.name }}</span>
                     <div style="display: flex; gap: 5px;">
-                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleEdit('{{ folder.id }}')">編輯</button>
-                        <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('極度危險！確定要刪除「{{ folder.name }}」資料夾嗎？\n所有包含的牌組和卡片都會被永久刪除！');" style="margin: 0;">
+                        <a href="{{ url_for('manage_folder_content', folder_id=folder.id) }}" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;">管理內容</a>
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleEdit('folder', {{ folder.id }})">編輯名稱</button>
+                        <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ folder.name }}」資料夾嗎？');" style="margin: 0;">
+                            <input type="hidden" name="action" value="delete_folder">
                             <input type="hidden" name="folder_id" value="{{ folder.id }}">
-                            <button type="submit" name="action" value="delete_folder" class="btn btn-red" style="padding: 5px 10px; font-size: 0.8rem;">刪除資料夾</button>
+                            <button type="submit" class="btn btn-red" style="padding: 5px 10px; font-size: 0.8rem;">刪除</button>
                         </form>
                     </div>
                 </div>
-                 <!-- Edit Folder Form (hidden by default) -->
-                <div style="display: none; margin-bottom: 10px;" id="folder-edit-{{ folder.id }}">
-                    <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; gap: 10px; align-items: center;">
+                <div id="folder-edit-{{ folder.id }}" style="display: none; margin-top: 10px;">
+                    <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; gap: 10px;">
                         <input type="hidden" name="action" value="edit_folder">
                         <input type="hidden" name="folder_id" value="{{ folder.id }}">
                         <input type="text" name="new_folder_name" value="{{ folder.name }}" required style="flex-grow: 1; margin: 0;">
                         <button type="submit" class="btn btn-green">儲存</button>
-                        <button type="button" class="btn btn-gray" onclick="toggleEdit('{{ folder.id }}')">取消</button>
+                        <button type="button" class="btn btn-gray" onclick="toggleEdit('folder', {{ folder.id }})">取消</button>
                     </form>
                 </div>
-                <ul style="list-style: none; padding: 0; margin: 0;">
-                    {% for deck in decks if deck.folder_id == folder.id %}
-                    <li style="display: flex; flex-direction: column; padding: 10px; border-top: 1px solid var(--border-color);">
-                        <!-- Deck Display View -->
-                        <div id="deck-display-{{ deck.id }}" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                             <div style="display: flex; align-items: center; gap: 15px;">
-                                <input type="checkbox" class="deck-checkbox" data-deck-id="{{ deck.id }}" data-parent-folder="{{ folder.id }}">
-                                <span>📇 {{ deck.name }}</span>
-                            </div>
-                            <div style="display: flex; gap: 5px;">
-                                <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleDeckEdit('{{ deck.id }}')">編輯</button>
-                                <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ deck.name }}」牌組嗎？\n此牌組中的所有卡片也會被一併刪除！');" style="margin: 0;">
-                                    <input type="hidden" name="deck_id" value="{{ deck.id }}">
-                                    <button type="submit" name="action" value="delete_deck" class="btn btn-red" style="padding: 5px 10px; font-size: 0.8rem;">刪除</button>
-                                </form>
-                            </div>
-                        </div>
-                        <!-- Deck Edit View (hidden) -->
-                        <div id="deck-edit-{{ deck.id }}" style="display: none; width: 100%;">
-                             <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: 100%;">
-                                <input type="hidden" name="action" value="edit_deck">
-                                <input type="hidden" name="deck_id" value="{{ deck.id }}">
-                                <input type="text" name="new_deck_name" value="{{ deck.name }}" required placeholder="新的牌組名稱..." style="margin: 0;">
-                                <select name="new_folder_id" required>
-                                    <option value="" disabled>選擇資料夾</option>
-                                    {% for f in folders %}
-                                    <option value="{{ f.id }}" {% if f.id == deck.folder_id %}selected{% endif %}>{{ f.name }}</option>
-                                    {% endfor %}
-                                </select>
-                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                                    <button type="submit" class="btn btn-green">儲存</button>
-                                    <button type="button" class="btn btn-gray" onclick="toggleDeckEdit('{{ deck.id }}')">取消</button>
-                                </div>
-                            </form>
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-        {% endfor %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Deck List -->
+    <div class="card mt-2">
+        <h4>牌組列表</h4>
+        <ul style="list-style: none; padding: 0; margin: 0;">
+            {% for deck in decks %}
+            <li style="padding: 10px; border-bottom: 1px solid var(--border-color);">
+                <div id="deck-display-{{ deck.id }}" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-weight: 500;">📇 {{ deck.name }}</span><br>
+                        <small style="color: var(--text-color-secondary);">隸屬於: {{ deck.folder_names or '任何資料夾' }}</small>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ deck.name }}」牌組嗎？此牌組中的所有卡片也會被刪除！');" style="margin: 0;">
+                            <input type="hidden" name="action" value="delete_deck">
+                            <input type="hidden" name="deck_id" value="{{ deck.id }}">
+                            <button type="submit" class="btn btn-red" style="padding: 5px 10px; font-size: 0.8rem;">刪除</button>
+                        </form>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
     </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const bulkActionsBar = document.getElementById('bulk-actions-bar');
-    const selectionCounter = document.getElementById('selection-counter');
-    const deckCheckboxes = document.querySelectorAll('.deck-checkbox');
-    const folderSelectAllCheckboxes = document.querySelectorAll('.folder-select-all');
-    const bulkMoveBtn = document.getElementById('bulk-move-btn');
-    const targetFolderSelect = document.getElementById('target-folder-select');
-
-    function updateSelectionState() {
-        const selectedDecks = document.querySelectorAll('.deck-checkbox:checked');
-        const count = selectedDecks.length;
-
-        if (count > 0) {
-            bulkActionsBar.style.display = 'flex';
-            selectionCounter.textContent = `已選取 ${count} 個項目`;
-        } else {
-            bulkActionsBar.style.display = 'none';
-        }
-    }
-
-    deckCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', updateSelectionState);
-    });
-
-    folderSelectAllCheckboxes.forEach(folderCheckbox => {
-        folderCheckbox.addEventListener('change', function() {
-            const folderId = this.dataset.folderId;
-            const decksInFolder = document.querySelectorAll(`.deck-checkbox[data-parent-folder="${folderId}"]`);
-            decksInFolder.forEach(deckCheckbox => {
-                deckCheckbox.checked = this.checked;
-            });
-            updateSelectionState();
-        });
-    });
-
-    bulkMoveBtn.addEventListener('click', function() {
-        const selectedDecks = document.querySelectorAll('.deck-checkbox:checked');
-        const targetFolderId = targetFolderSelect.value;
-
-        if (selectedDecks.length === 0) {
-            alert('請至少選擇一個要移動的牌組。');
-            return;
-        }
-        if (!targetFolderId) {
-            alert('請選擇目標資料夾。');
-            return;
-        }
-
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = "{{ url_for('manage_decks') }}";
-
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'bulk_move_decks';
-        form.appendChild(actionInput);
-
-        const targetFolderInput = document.createElement('input');
-        targetFolderInput.type = 'hidden';
-        targetFolderInput.name = 'target_folder_id';
-        targetFolderInput.value = targetFolderId;
-        form.appendChild(targetFolderInput);
-
-        selectedDecks.forEach(deck => {
-            const deckInput = document.createElement('input');
-            deckInput.type = 'hidden';
-            deckInput.name = 'deck_ids';
-            deckInput.value = deck.dataset.deckId;
-            form.appendChild(deckInput);
-        });
-
-        document.body.appendChild(form);
-        form.submit();
-    });
-});
-
-function toggleEdit(folderId) {
-    const displayDiv = document.getElementById(`folder-display-${folderId}`);
-    const editDiv = document.getElementById(`folder-edit-${folderId}`);
-    
-    // Hide the other view
-    const h5 = displayDiv.querySelector('h5');
-    if (h5) {
-        if (editDiv.style.display === 'none') {
-            h5.style.display = 'none';
-            editDiv.style.display = 'flex';
-        } else {
-            h5.style.display = 'block';
-            editDiv.style.display = 'none';
-        }
-    } else { // Fallback for the new structure
-         if (editDiv.style.display === 'none') {
-            displayDiv.style.display = 'none';
-            editDiv.style.display = 'flex';
-        } else {
-            displayDiv.style.display = 'flex';
-            editDiv.style.display = 'none';
-        }
-    }
-}
-
-function toggleDeckEdit(deckId) {
-    const displayDiv = document.getElementById(`deck-display-${deckId}`);
-    const editDiv = document.getElementById(`deck-edit-${deckId}`);
+function toggleEdit(type, id) {
+    const displayDiv = document.getElementById(`${type}-display-${id}`);
+    const editDiv = document.getElementById(`${type}-edit-${id}`);
     
     if (displayDiv.style.display === 'none') {
         displayDiv.style.display = 'flex';
         editDiv.style.display = 'none';
     } else {
         displayDiv.style.display = 'none';
-        editDiv.style.display = 'flex';
+        editDiv.style.display = 'block';
     }
 }
 </script>

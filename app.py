@@ -22,26 +22,64 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key_should_be_changed'
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        
-        # 建立 folders 表
+
+        # --- Schema and Migration to Many-to-Many ---
+        cursor.execute("PRAGMA table_info(decks)")
+        deck_columns = [column[1] for column in cursor.fetchall()]
+
+        # If 'folder_id' exists in decks, we need to migrate to the new many-to-many schema.
+        if 'folder_id' in deck_columns:
+            # 1. Create the new junction table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS deck_folders (
+                    deck_id INTEGER NOT NULL,
+                    folder_id INTEGER NOT NULL,
+                    PRIMARY KEY (deck_id, folder_id),
+                    FOREIGN KEY(deck_id) REFERENCES decks(id),
+                    FOREIGN KEY(folder_id) REFERENCES folders(id)
+                )
+            ''')
+
+            # 2. Migrate existing relationships
+            cursor.execute("SELECT id, folder_id FROM decks WHERE folder_id IS NOT NULL")
+            relations_to_migrate = cursor.fetchall()
+            cursor.executemany("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", relations_to_migrate)
+
+            # 3. Recreate the decks table without folder_id
+            cursor.execute('''
+                CREATE TABLE decks_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+            ''')
+            cursor.execute("INSERT INTO decks_new (id, name) SELECT id, name FROM decks")
+            cursor.execute("DROP TABLE decks")
+            cursor.execute("ALTER TABLE decks_new RENAME TO decks")
+            
+            flash("資料庫結構已成功升級至新版！", "success")
+
+        # --- Standard Table Creation (for new setup or after migration) ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS folders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE
             )
         ''')
-
-        # 建立 decks 表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS decks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                folder_id INTEGER,
-                FOREIGN KEY (folder_id) REFERENCES folders (id)
+                name TEXT NOT NULL UNIQUE
             )
         ''')
-        
-        # 建立 cards 表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS deck_folders (
+                deck_id INTEGER NOT NULL,
+                folder_id INTEGER NOT NULL,
+                PRIMARY KEY (deck_id, folder_id),
+                FOREIGN KEY(deck_id) REFERENCES decks(id) ON DELETE CASCADE,
+                FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE CASCADE
+            )
+        ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,12 +91,12 @@ def init_db():
                 ef FLOAT DEFAULT 2.5,
                 card_type TEXT NOT NULL DEFAULT 'recognize',
                 deck_id INTEGER,
-                FOREIGN KEY (deck_id) REFERENCES decks (id)
+                FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
             )
         ''')
 
-        # --- 舊資料庫遷移 ---
-        # 檢查是否有預設資料夾
+        # --- Default Data and Minor Migrations ---
+        # Ensure default folder exists
         cursor.execute("SELECT id FROM folders WHERE name = '預設資料夾'")
         default_folder = cursor.fetchone()
         if not default_folder:
@@ -67,35 +105,28 @@ def init_db():
         else:
             default_folder_id = default_folder[0]
 
-        # 檢查 decks 表是否有 folder_id 欄位
-        cursor.execute("PRAGMA table_info(decks)")
-        deck_columns = [column[1] for column in cursor.fetchall()]
-        if 'folder_id' not in deck_columns:
-            cursor.execute("ALTER TABLE decks ADD COLUMN folder_id INTEGER")
-            # 將所有舊牌組歸入預設資料夾
-            cursor.execute("UPDATE decks SET folder_id = ? WHERE folder_id IS NULL", (default_folder_id,))
-
-        # 檢查是否有預設牌組
+        # Ensure default deck exists
         cursor.execute("SELECT id FROM decks WHERE name = '預設牌組'")
         default_deck = cursor.fetchone()
         if not default_deck:
-            cursor.execute("INSERT INTO decks (name, folder_id) VALUES ('預設牌組', ?)", (default_folder_id,))
+            cursor.execute("INSERT INTO decks (name) VALUES ('預設牌組')")
             default_deck_id = cursor.lastrowid
+            # Associate default deck with default folder
+            cursor.execute("INSERT OR IGNORE INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (default_deck_id, default_folder_id))
         else:
             default_deck_id = default_deck[0]
 
-        # 檢查 cards 表是否有 deck_id 欄位
+        # Check if old cards have a deck_id
         cursor.execute("PRAGMA table_info(cards)")
         card_columns = [column[1] for column in cursor.fetchall()]
         if 'deck_id' not in card_columns:
             cursor.execute("ALTER TABLE cards ADD COLUMN deck_id INTEGER")
-            # 將所有舊卡片歸入預設牌組
             cursor.execute("UPDATE cards SET deck_id = ? WHERE deck_id IS NULL", (default_deck_id,))
-
-        # 檢查 card_type 欄位是否存在
+        
+        # Check if card_type column exists
         if 'card_type' not in card_columns:
             cursor.execute("ALTER TABLE cards ADD COLUMN card_type TEXT NOT NULL DEFAULT 'recognize'")
-        
+
         conn.commit()
 
 # --- SM-2 記憶演算法 ---
@@ -150,7 +181,6 @@ def index():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # 取得所有資料夾
         cursor.execute("SELECT * FROM folders ORDER BY name")
         folders = cursor.fetchall()
         
@@ -160,15 +190,16 @@ def index():
         for folder in folders:
             folder_dict = dict(folder)
             
-            # 取得該資料夾中的所有牌組，並計算每個牌組的到期卡片數量
+            # New query using the many-to-many junction table
             cursor.execute("""
                 SELECT 
                     d.id, 
                     d.name, 
                     COUNT(c.id) as due_count
                 FROM decks d
+                JOIN deck_folders df ON d.id = df.deck_id
                 LEFT JOIN cards c ON d.id = c.deck_id AND c.next_review <= ?
-                WHERE d.folder_id = ?
+                WHERE df.folder_id = ?
                 GROUP BY d.id, d.name
                 ORDER BY d.name
             """, (today, folder['id']))
@@ -180,7 +211,6 @@ def index():
             
             folders_with_decks.append(folder_dict)
 
-        # 取得所有卡片並附上牌組名稱
         cursor.execute("""
             SELECT c.front, c.back, c.next_review, c.card_type, d.name as deck_name
             FROM cards c
@@ -211,32 +241,20 @@ def manage_decks():
 
             elif action == 'add_deck':
                 deck_name = request.form.get('deck_name')
-                folder_id = request.form.get('folder_id') # This can be an empty string
                 if deck_name:
-                    # If no folder is selected, find and assign to the 'default' folder.
-                    if not folder_id:
+                    try:
+                        cursor.execute("INSERT INTO decks (name) VALUES (?)", (deck_name,))
+                        deck_id = cursor.lastrowid
+                        
+                        # Automatically add to default folder
                         cursor.execute("SELECT id FROM folders WHERE name = '預設資料夾'")
                         default_folder = cursor.fetchone()
                         if default_folder:
-                            folder_id = default_folder['id']
-                        else:
-                            # If default folder doesn't exist for some reason, create it.
-                            cursor.execute("INSERT INTO folders (name) VALUES ('預設資料夾')")
-                            folder_id = cursor.lastrowid
-                    
-                    try:
-                        cursor.execute("INSERT INTO decks (name, folder_id) VALUES (?, ?)", (deck_name, folder_id))
+                            cursor.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, default_folder['id']))
+
                         flash(f"成功新增牌組: {deck_name}", "success")
                     except sqlite3.IntegrityError:
                         flash(f"⚠️ 牌組名稱「{deck_name}」已存在。", "error")
-
-            elif action == 'bulk_move_decks':
-                deck_ids = request.form.getlist('deck_ids')
-                target_folder_id = request.form.get('target_folder_id')
-                if deck_ids and target_folder_id:
-                    for deck_id in deck_ids:
-                        cursor.execute("UPDATE decks SET folder_id = ? WHERE id = ?", (target_folder_id, deck_id))
-                    flash(f"成功移動 {len(deck_ids)} 個牌組。", "success")
 
             elif action == 'edit_folder':
                 folder_id = request.form.get('folder_id')
@@ -248,51 +266,74 @@ def manage_decks():
                     except sqlite3.IntegrityError:
                         flash(f"⚠️ 資料夾名稱「{new_folder_name}」已存在。", "error")
 
-            elif action == 'edit_deck':
-                deck_id = request.form.get('deck_id')
-                new_deck_name = request.form.get('new_deck_name')
-                new_folder_id = request.form.get('new_folder_id')
-                if deck_id and new_deck_name and new_folder_id:
-                    try:
-                        cursor.execute("UPDATE decks SET name = ?, folder_id = ? WHERE id = ?", (new_deck_name, new_folder_id, deck_id))
-                        flash(f"牌組「{new_deck_name}」已更新。", "success")
-                    except sqlite3.IntegrityError:
-                        flash(f"⚠️ 牌組名稱「{new_deck_name}」已存在。", "error")
-
             elif action == 'delete_folder':
                 folder_id = request.form.get('folder_id')
                 if folder_id:
-                    # Find decks in folder
-                    cursor.execute("SELECT id FROM decks WHERE folder_id = ?", (folder_id,))
-                    deck_ids_to_delete = [row['id'] for row in cursor.fetchall()]
-                    if deck_ids_to_delete:
-                        # Delete cards in those decks
-                        cursor.execute(f"DELETE FROM cards WHERE deck_id IN ({','.join('?' for _ in deck_ids_to_delete)})", deck_ids_to_delete)
-                    # Delete decks
-                    cursor.execute("DELETE FROM decks WHERE folder_id = ?", (folder_id,))
-                    # Delete folder
+                    # ON DELETE CASCADE will handle deck_folders entries
                     cursor.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
-                    flash("已成功刪除資料夾及所有包含的內容。", "success")
+                    flash("已成功刪除資料夾。", "success")
 
             elif action == 'delete_deck':
                 deck_id = request.form.get('deck_id')
                 if deck_id:
-                    cursor.execute("DELETE FROM cards WHERE deck_id = ?", (deck_id,))
+                    # ON DELETE CASCADE will handle cards and deck_folders entries
                     cursor.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
-                    flash("已成功刪除牌組及相關卡片。", "success")
+                    flash("已成功刪除牌組及所有相關內容。", "success")
             
             conn.commit()
             return redirect(url_for('manage_decks'))
 
-        # 取得所有資料夾
+        # For GET request
         cursor.execute("SELECT * FROM folders ORDER BY name")
         folders = cursor.fetchall()
         
-        # 取得所有牌組，並附上資料夾ID
-        cursor.execute("SELECT * FROM decks ORDER BY name")
+        # Get all decks and the folders they belong to
+        cursor.execute("""
+            SELECT d.id, d.name, GROUP_CONCAT(f.name) as folder_names
+            FROM decks d
+            LEFT JOIN deck_folders df ON d.id = df.deck_id
+            LEFT JOIN folders f ON df.folder_id = f.id
+            GROUP BY d.id
+            ORDER BY d.name
+        """)
         decks = cursor.fetchall()
         
     return render_template('decks.html', decks=decks, folders=folders)
+
+@app.route('/folder/<int:folder_id>/manage', methods=['GET', 'POST'])
+def manage_folder_content(folder_id):
+    with sqlite3.connect(DB_NAME) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        if request.method == 'POST':
+            selected_deck_ids = request.form.getlist('deck_ids')
+            
+            # Update the associations for this folder
+            cursor.execute("DELETE FROM deck_folders WHERE folder_id = ?", (folder_id,))
+            if selected_deck_ids:
+                data_to_insert = [(deck_id, folder_id) for deck_id in selected_deck_ids]
+                cursor.executemany("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", data_to_insert)
+            
+            conn.commit()
+            flash("成功更新資料夾內容！", "success")
+            return redirect(url_for('manage_decks'))
+
+        # GET request
+        cursor.execute("SELECT * FROM folders WHERE id = ?", (folder_id,))
+        folder = cursor.fetchone()
+
+        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        all_decks = cursor.fetchall()
+        
+        cursor.execute("SELECT deck_id FROM deck_folders WHERE folder_id = ?", (folder_id,))
+        associated_deck_ids = {row['deck_id'] for row in cursor.fetchall()}
+
+    return render_template('manage_folder_content.html', 
+                           folder=folder, 
+                           all_decks=all_decks, 
+                           associated_deck_ids=associated_deck_ids)
+
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_card():

@@ -53,6 +53,10 @@
     source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
     pip install -r requirements.txt
     ```
+    *(注意：若在 Linux 環境下執行，請確保已安裝 `espeak` 或 `espeak-ng`，以支援離線發音功能。)*
+    ```bash
+    sudo apt-get update && sudo apt-get install espeak
+    ```
 
 3.  **設定環境變數:**
     - 複製範例檔案 `.env.example` 為 `.env`。

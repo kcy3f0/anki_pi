@@ -296,15 +296,19 @@
             });
         }
 
-        // 發音功能 (使用瀏覽器內建 Web Speech API)
+        // 發音功能 (使用後端 API)
+        let currentAudio = null;
+
         function speak(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // 停止上一句，避免重疊
-                const u = new SpeechSynthesisUtterance(text);
-                u.lang = 'en-US'; // 設定語言為美式英文
-                u.rate = 0.9;     // 語速稍慢
-                window.speechSynthesis.speak(u);
+            // 停止上一句，避免重疊
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
             }
+
+            const url = `/api/tts?text=${encodeURIComponent(text)}`;
+            currentAudio = new Audio(url);
+            currentAudio.play().catch(e => console.error("Audio play failed:", e));
         }
     </script>
 </body>

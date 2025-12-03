@@ -7,12 +7,20 @@ import csv
 import shutil
 import time
 import io
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+import pyttsx3
+import tempfile
+import uuid
+import flask
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from config import DB_NAME, TARGET_FILE, PROCESSED_DIR, MODEL_NAME
+import threading
 
 load_dotenv() # 讀取 .env 檔案
+
+# Initialize TTS Engine lock to prevent concurrency issues with pyttsx3
+tts_lock = threading.Lock()
 
 app = Flask(__name__)
 # 從環境變數讀取 SECRET_KEY，如果找不到則使用一個預設值 (僅供開發)
@@ -509,6 +517,45 @@ def ai_check():
     
     feedback = ask_ollama(prompt)
     return render_template('ai_result.html', question=question, answer=user_answer, feedback=feedback)
+
+# --- TTS API ---
+@app.route('/api/tts', methods=['GET'])
+def tts_api():
+    text = request.args.get('text')
+    if not text:
+        return "No text provided", 400
+
+    try:
+        # Create a temporary file
+        temp_dir = tempfile.gettempdir()
+        filename = f"{uuid.uuid4()}.mp3"
+        filepath = os.path.join(temp_dir, filename)
+
+        with tts_lock:
+            engine = pyttsx3.init()
+            # Try to save as mp3 if supported, otherwise wav might be default depending on platform/driver
+            # pyttsx3 save_to_file extension handling depends on the underlying driver.
+            # espeak usually outputs wav, but we can name it whatever.
+            # Let's use .wav to be safe with standard drivers, or just let it be.
+            # If we want mp3 specifically, we might need ffmpeg, but let's stick to what works simply.
+            # Using .wav is safer for cross-platform compatibility without extra libs.
+            filename = f"{uuid.uuid4()}.wav"
+            filepath = os.path.join(temp_dir, filename)
+
+            engine.save_to_file(text, filepath)
+            engine.runAndWait()
+
+        @flask.after_this_request
+        def remove_file(response):
+            try:
+                os.remove(filepath)
+            except Exception as error:
+                app.logger.error("Error removing or closing downloaded file handle", error)
+            return response
+
+        return send_file(filepath, mimetype="audio/wav")
+    except Exception as e:
+        return f"TTS Error: {str(e)}", 500
 
 # --- 速記/滑動模式 (API 支援) ---
 

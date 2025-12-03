@@ -330,14 +330,20 @@
         });
 
         // Speech synthesis
+        let currentAudio = null;
+
         function speakText(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const u = new SpeechSynthesisUtterance(text);
-                u.lang = 'en-US'; 
-                u.rate = 0.9;
-                window.speechSynthesis.speak(u);
+            // Cancel any previous audio
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
             }
+
+            // Call backend API to generate audio
+            const url = `/api/tts?text=${encodeURIComponent(text)}`;
+
+            currentAudio = new Audio(url);
+            currentAudio.play().catch(e => console.error("Audio play failed:", e));
         }
     </script>
 </body>

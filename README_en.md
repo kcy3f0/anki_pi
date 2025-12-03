@@ -53,6 +53,10 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
     source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
     pip install -r requirements.txt
     ```
+    *(Note: If running on Linux, ensure `espeak` or `espeak-ng` is installed to support offline text-to-speech functionality.)*
+    ```bash
+    sudo apt-get update && sudo apt-get install espeak
+    ```
 
 3.  **Configure Environment Variables:**
     - Copy the example file `.env.example` to `.env`.

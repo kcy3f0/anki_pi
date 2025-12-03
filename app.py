@@ -211,13 +211,32 @@ def manage_decks():
 
             elif action == 'add_deck':
                 deck_name = request.form.get('deck_name')
-                folder_id = request.form.get('folder_id')
-                if deck_name and folder_id:
+                folder_id = request.form.get('folder_id') # This can be an empty string
+                if deck_name:
+                    # If no folder is selected, find and assign to the 'default' folder.
+                    if not folder_id:
+                        cursor.execute("SELECT id FROM folders WHERE name = '預設資料夾'")
+                        default_folder = cursor.fetchone()
+                        if default_folder:
+                            folder_id = default_folder['id']
+                        else:
+                            # If default folder doesn't exist for some reason, create it.
+                            cursor.execute("INSERT INTO folders (name) VALUES ('預設資料夾')")
+                            folder_id = cursor.lastrowid
+                    
                     try:
                         cursor.execute("INSERT INTO decks (name, folder_id) VALUES (?, ?)", (deck_name, folder_id))
                         flash(f"成功新增牌組: {deck_name}", "success")
                     except sqlite3.IntegrityError:
                         flash(f"⚠️ 牌組名稱「{deck_name}」已存在。", "error")
+
+            elif action == 'bulk_move_decks':
+                deck_ids = request.form.getlist('deck_ids')
+                target_folder_id = request.form.get('target_folder_id')
+                if deck_ids and target_folder_id:
+                    for deck_id in deck_ids:
+                        cursor.execute("UPDATE decks SET folder_id = ? WHERE id = ?", (target_folder_id, deck_id))
+                    flash(f"成功移動 {len(deck_ids)} 個牌組。", "success")
 
             elif action == 'edit_folder':
                 folder_id = request.form.get('folder_id')

@@ -17,8 +17,8 @@
         <div class="card">
             <h4>新增牌組</h4>
             <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; flex-direction: column; gap: 10px;">
-                <select name="folder_id" required>
-                    <option value="" disabled selected>選擇資料夾</option>
+                <select name="folder_id">
+                    <option value="" selected>自動歸入「預設資料夾」</option>
                     {% for folder in folders %}
                     <option value="{{ folder.id }}">{{ folder.name }}</option>
                     {% endfor %}
@@ -29,14 +29,33 @@
         </div>
     </div>
 
+    <!-- Bulk Actions Bar -->
+    <div id="bulk-actions-bar" class="card" style="display: none; margin-bottom: 1rem; flex-direction: row; justify-content: space-between; align-items: center; gap: 20px;">
+        <span id="selection-counter">已選取 0 個項目</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="target-folder-select" name="target_folder_id" required>
+                <option value="" disabled selected>選擇目標資料夾...</option>
+                {% for folder in folders %}
+                    <option value="{{ folder.id }}">{{ folder.name }}</option>
+                {% endfor %}
+            </select>
+            <button id="bulk-move-btn" class="btn btn-primary">移動</button>
+        </div>
+    </div>
+
 
     <!-- Folder & Deck List -->
     <div class="card mt-2">
         <h4>現有內容</h4>
         {% for folder in folders %}
             <div style="background: var(--bg-color); padding: 15px; border-radius: 8px; margin-bottom: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;" id="folder-display-{{ folder.id }}">
-                    <h5 style="margin:0; font-size: 1.2rem;">📁 {{ folder.name }}</h5>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <input type="checkbox" class="folder-select-all" data-folder-id="{{ folder.id }}" title="全選/取消全選">
+                        <div id="folder-display-{{ folder.id }}">
+                            <h5 style="margin:0; font-size: 1.2rem;">📁 {{ folder.name }}</h5>
+                        </div>
+                    </div>
                     <div style="display: flex; gap: 5px;">
                         <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleEdit('{{ folder.id }}')">編輯</button>
                         <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('極度危險！確定要刪除「{{ folder.name }}」資料夾嗎？\n所有包含的牌組和卡片都會被永久刪除！');" style="margin: 0;">
@@ -45,7 +64,7 @@
                         </form>
                     </div>
                 </div>
-                <!-- Edit Folder Form (hidden by default) -->
+                 <!-- Edit Folder Form (hidden by default) -->
                 <div style="display: none; margin-bottom: 10px;" id="folder-edit-{{ folder.id }}">
                     <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; gap: 10px; align-items: center;">
                         <input type="hidden" name="action" value="edit_folder">
@@ -60,7 +79,10 @@
                     <li style="display: flex; flex-direction: column; padding: 10px; border-top: 1px solid var(--border-color);">
                         <!-- Deck Display View -->
                         <div id="deck-display-{{ deck.id }}" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                            <span>📇 {{ deck.name }}</span>
+                             <div style="display: flex; align-items: center; gap: 15px;">
+                                <input type="checkbox" class="deck-checkbox" data-deck-id="{{ deck.id }}" data-parent-folder="{{ folder.id }}">
+                                <span>📇 {{ deck.name }}</span>
+                            </div>
                             <div style="display: flex; gap: 5px;">
                                 <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleDeckEdit('{{ deck.id }}')">編輯</button>
                                 <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ deck.name }}」牌組嗎？\n此牌組中的所有卡片也會被一併刪除！');" style="margin: 0;">
@@ -95,16 +117,105 @@
     </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+    const bulkActionsBar = document.getElementById('bulk-actions-bar');
+    const selectionCounter = document.getElementById('selection-counter');
+    const deckCheckboxes = document.querySelectorAll('.deck-checkbox');
+    const folderSelectAllCheckboxes = document.querySelectorAll('.folder-select-all');
+    const bulkMoveBtn = document.getElementById('bulk-move-btn');
+    const targetFolderSelect = document.getElementById('target-folder-select');
+
+    function updateSelectionState() {
+        const selectedDecks = document.querySelectorAll('.deck-checkbox:checked');
+        const count = selectedDecks.length;
+
+        if (count > 0) {
+            bulkActionsBar.style.display = 'flex';
+            selectionCounter.textContent = `已選取 ${count} 個項目`;
+        } else {
+            bulkActionsBar.style.display = 'none';
+        }
+    }
+
+    deckCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectionState);
+    });
+
+    folderSelectAllCheckboxes.forEach(folderCheckbox => {
+        folderCheckbox.addEventListener('change', function() {
+            const folderId = this.dataset.folderId;
+            const decksInFolder = document.querySelectorAll(`.deck-checkbox[data-parent-folder="${folderId}"]`);
+            decksInFolder.forEach(deckCheckbox => {
+                deckCheckbox.checked = this.checked;
+            });
+            updateSelectionState();
+        });
+    });
+
+    bulkMoveBtn.addEventListener('click', function() {
+        const selectedDecks = document.querySelectorAll('.deck-checkbox:checked');
+        const targetFolderId = targetFolderSelect.value;
+
+        if (selectedDecks.length === 0) {
+            alert('請至少選擇一個要移動的牌組。');
+            return;
+        }
+        if (!targetFolderId) {
+            alert('請選擇目標資料夾。');
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('manage_decks') }}";
+
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'bulk_move_decks';
+        form.appendChild(actionInput);
+
+        const targetFolderInput = document.createElement('input');
+        targetFolderInput.type = 'hidden';
+        targetFolderInput.name = 'target_folder_id';
+        targetFolderInput.value = targetFolderId;
+        form.appendChild(targetFolderInput);
+
+        selectedDecks.forEach(deck => {
+            const deckInput = document.createElement('input');
+            deckInput.type = 'hidden';
+            deckInput.name = 'deck_ids';
+            deckInput.value = deck.dataset.deckId;
+            form.appendChild(deckInput);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    });
+});
+
 function toggleEdit(folderId) {
     const displayDiv = document.getElementById(`folder-display-${folderId}`);
     const editDiv = document.getElementById(`folder-edit-${folderId}`);
     
-    if (displayDiv.style.display === 'none') {
-        displayDiv.style.display = 'flex';
-        editDiv.style.display = 'none';
-    } else {
-        displayDiv.style.display = 'none';
-        editDiv.style.display = 'flex';
+    // Hide the other view
+    const h5 = displayDiv.querySelector('h5');
+    if (h5) {
+        if (editDiv.style.display === 'none') {
+            h5.style.display = 'none';
+            editDiv.style.display = 'flex';
+        } else {
+            h5.style.display = 'block';
+            editDiv.style.display = 'none';
+        }
+    } else { // Fallback for the new structure
+         if (editDiv.style.display === 'none') {
+            displayDiv.style.display = 'none';
+            editDiv.style.display = 'flex';
+        } else {
+            displayDiv.style.display = 'flex';
+            editDiv.style.display = 'none';
+        }
     }
 }
 

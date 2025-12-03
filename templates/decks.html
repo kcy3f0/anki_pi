@@ -70,12 +70,22 @@
                         <small style="color: var(--text-color-secondary);">隸屬於: {{ deck.folder_names or '任何資料夾' }}</small>
                     </div>
                     <div style="display: flex; gap: 5px;">
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="toggleEdit('deck', {{ deck.id }})">編輯名稱</button>
                         <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ deck.name }}」牌組嗎？此牌組中的所有卡片也會被刪除！');" style="margin: 0;">
                             <input type="hidden" name="action" value="delete_deck">
                             <input type="hidden" name="deck_id" value="{{ deck.id }}">
                             <button type="submit" class="btn btn-red" style="padding: 5px 10px; font-size: 0.8rem;">刪除</button>
                         </form>
                     </div>
+                </div>
+                <div id="deck-edit-{{ deck.id }}" style="display: none; margin-top: 10px;">
+                    <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; gap: 10px;">
+                        <input type="hidden" name="action" value="edit_deck_name">
+                        <input type="hidden" name="deck_id" value="{{ deck.id }}">
+                        <input type="text" name="new_deck_name" value="{{ deck.name }}" required style="flex-grow: 1; margin: 0;">
+                        <button type="submit" class="btn btn-green">儲存</button>
+                        <button type="button" class="btn btn-gray" onclick="toggleEdit('deck', {{ deck.id }})">取消</button>
+                    </form>
                 </div>
             </li>
             {% endfor %}

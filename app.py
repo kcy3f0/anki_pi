@@ -266,6 +266,16 @@ def manage_decks():
                     except sqlite3.IntegrityError:
                         flash(f"⚠️ 資料夾名稱「{new_folder_name}」已存在。", "error")
 
+            elif action == 'edit_deck_name':
+                deck_id = request.form.get('deck_id')
+                new_deck_name = request.form.get('new_deck_name')
+                if deck_id and new_deck_name:
+                    try:
+                        cursor.execute("UPDATE decks SET name = ? WHERE id = ?", (new_deck_name, deck_id))
+                        flash("牌組名稱已更新。", "success")
+                    except sqlite3.IntegrityError:
+                        flash(f"⚠️ 牌組名稱「{new_deck_name}」已存在。", "error")
+
             elif action == 'delete_folder':
                 folder_id = request.form.get('folder_id')
                 if folder_id:
@@ -348,6 +358,10 @@ def add_card():
             deck_id = request.form['deck_id']
             today = datetime.now().date()
             
+            if not deck_id:
+                flash("請選擇一個牌組！", "error")
+                return redirect(url_for('add_card'))
+
             cursor.execute(
                 "INSERT INTO cards (front, back, next_review, card_type, deck_id, interval, repetition, ef) VALUES (?, ?, ?, ?, ?, 0, 0, 2.5)",
                 (front, back, today, card_type, deck_id)
@@ -356,17 +370,11 @@ def add_card():
             flash(f"成功新增卡片: {front}", "success")
             return redirect(url_for('add_card'))
 
-        # 取得巢狀的資料夾與牌組結構
-        cursor.execute("SELECT * FROM folders ORDER BY name")
-        folders_raw = cursor.fetchall()
-        folders = []
-        for folder in folders_raw:
-            folder_dict = dict(folder)
-            cursor.execute("SELECT * FROM decks WHERE folder_id = ? ORDER BY name", (folder['id'],))
-            folder_dict['decks'] = cursor.fetchall()
-            folders.append(folder_dict)
+        # GET request: Fetch a flat list of all decks
+        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        decks = cursor.fetchall()
         
-    return render_template('add.html', folders=folders)
+    return render_template('add.html', decks=decks)
 # --- 傳統學習模式 (含隨機中英切換) ---
 @app.route('/study/<int:deck_id>')
 def study(deck_id):

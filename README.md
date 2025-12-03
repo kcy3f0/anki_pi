@@ -153,4 +153,4 @@
 ## 📄 授權
 
 本專案採用 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) 授權](https://creativecommons.org/licenses/by-nc-sa/4.0/)。
-請注意，此授權不允許商業用途。
+請注意，此授權不允許商業用途。Wed Dec  3 08:44:26 UTC 2025

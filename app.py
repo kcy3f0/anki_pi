@@ -653,17 +653,11 @@ def import_paste():
                 flash(f"⚠️ 匯入失敗: {e}", "error")
                 return redirect(url_for('import_paste'))
 
-        # 取得巢狀的資料夾與牌組結構
-        cursor.execute("SELECT * FROM folders ORDER BY name")
-        folders_raw = cursor.fetchall()
-        folders = []
-        for folder in folders_raw:
-            folder_dict = dict(folder)
-            cursor.execute("SELECT * FROM decks WHERE folder_id = ? ORDER BY name", (folder['id'],))
-            folder_dict['decks'] = cursor.fetchall()
-            folders.append(folder_dict)
+        # GET request: Fetch a flat list of all decks
+        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        decks = cursor.fetchall()
 
-    return render_template('import_paste.html', folders=folders)
+    return render_template('import_paste.html', decks=decks)
 
 
 @app.route('/reset_progress', methods=['POST'])

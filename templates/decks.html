@@ -55,7 +55,9 @@
                         <button type="button" class="btn btn-gray" onclick="toggleEdit('{{ folder.id }}')">取消</button>
                     </form>
                 </div>
-                <li style="display: flex; flex-direction: column; padding: 10px; border-top: 1px solid var(--border-color);">
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    {% for deck in decks if deck.folder_id == folder.id %}
+                    <li style="display: flex; flex-direction: column; padding: 10px; border-top: 1px solid var(--border-color);">
                         <!-- Deck Display View -->
                         <div id="deck-display-{{ deck.id }}" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                             <span>📇 {{ deck.name }}</span>
@@ -67,15 +69,16 @@
                                 </form>
                             </div>
                         </div>
-                         <div id="deck-edit-{{ deck.id }}" style="display: none; width: 100%;">
+                        <!-- Deck Edit View (hidden) -->
+                        <div id="deck-edit-{{ deck.id }}" style="display: none; width: 100%;">
                              <form method="POST" action="{{ url_for('manage_decks') }}" style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: 100%;">
                                 <input type="hidden" name="action" value="edit_deck">
                                 <input type="hidden" name="deck_id" value="{{ deck.id }}">
                                 <input type="text" name="new_deck_name" value="{{ deck.name }}" required placeholder="新的牌組名稱..." style="margin: 0;">
                                 <select name="new_folder_id" required>
                                     <option value="" disabled>選擇資料夾</option>
-                                    {% for folder in folders %}
-                                    <option value="{{ folder.id }}" {% if folder.id == deck.folder_id %}selected{% endif %}>{{ folder.name }}</option>
+                                    {% for f in folders %}
+                                    <option value="{{ f.id }}" {% if f.id == deck.folder_id %}selected{% endif %}>{{ f.name }}</option>
                                     {% endfor %}
                                 </select>
                                 <div style="display: flex; gap: 10px; justify-content: flex-end;">

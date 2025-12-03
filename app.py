@@ -56,7 +56,7 @@ def init_db():
             cursor.execute("DROP TABLE decks")
             cursor.execute("ALTER TABLE decks_new RENAME TO decks")
             
-            flash("資料庫結構已成功升級至新版！", "success")
+            print("資料庫結構已成功升級至新版！")
 
         # --- Standard Table Creation (for new setup or after migration) ---
         cursor.execute('''

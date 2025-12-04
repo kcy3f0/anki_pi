@@ -11,11 +11,10 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
     - **AI Quiz:** Integrates [Ollama](https://ollama.ai/) to dynamically generate quizzes using Large Language Models (LLMs), adding a challenge to learning.
 - **📂 Convenient Card Management:**
     - Manually add new flashcards.
-    - Batch import a large number of cards with a single click from a `data.csv` file.
+    - Batch import cards via copy-paste.
     - One-click reset of all learning progress.
 - **🔔 Discord Notifications:**
     - Daily reminders for cards due for review.
-    - Notifications upon successful import of new cards.
 - **🎨 Modern Interface:**
     - Clean, responsive web design.
     - Supports light/dark mode switching.
@@ -67,7 +66,7 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 4.  **Configure Application Settings (config.py):**
     - Edit the `config.py` file to adjust non-sensitive settings, such as:
       - `MODEL_NAME`: The name of the Ollama model you want to use.
-      - `DB_NAME`, `TARGET_FILE`, `PROCESSED_DIR`: Database and file paths used by the application.
+      - `DB_NAME`: Database used by the application.
 
 5.  **Modify Scheduled Task Script (Optional):**
     - If you want to use the daily reminder feature, edit `reminder.sh` and change `/path/to/your/project/` to the **absolute path** of your project.
@@ -99,17 +98,16 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
         - **Need to Spell:** During review, the Chinese (back) will always be displayed, requiring you to spell out the English (front).
 
 - **Batch Import:**
-    1.  Create a file named `data.csv` in the project root directory.
-    2.  The file format is either two or three columns:
-        - **Two columns:** The first column is "Front", the second is "Back". All cards will be defaulted to the `Recognize Only` type.
-        - **Three columns:** The first column is "Front", the second is "Back", and the third column is "Card Type" (can be `recognize` or `spell`. If left blank or other values are entered, it defaults to `recognize`).
-        **No header is needed.** For example:
+    - Click "📋 Import by Paste" on the main screen.
+    - Paste your CSV content.
+    - Format:
+        - First column "Front", second column "Back".
+        - Example:
         ```csv
-        apple,蘋果,recognize
-        banana,香蕉,spell
+        apple,蘋果
+        banana,香蕉
         cat,貓
         ```
-    3.  Go back to the main screen and click "📂 Import New Words". The system will automatically read and import the contents of `data.csv`, then save it to the `imported_files` folder.
 
 ### Learn
 

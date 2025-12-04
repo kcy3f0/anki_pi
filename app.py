@@ -4,13 +4,11 @@ import random
 import json
 import os
 import csv
-import shutil
-import time
 import io
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from config import DB_NAME, TARGET_FILE, PROCESSED_DIR, MODEL_NAME
+from config import DB_NAME, MODEL_NAME
 
 load_dotenv() # 讀取 .env 檔案
 
@@ -599,54 +597,6 @@ def api_submit_swipe():
     return jsonify({'status': 'success'})
 
 # --- 工具：匯入 & 重置 ---
-@app.route('/import', methods=['POST'])
-def import_cards():
-    deck_id = request.form.get('deck_id')
-    if not deck_id:
-        flash("⚠️ 請選擇要匯入的牌組。", "error")
-        return redirect(url_for('index'))
-
-    if not os.path.exists(TARGET_FILE):
-        flash("找不到 data.csv 檔案，請先將檔案上傳到專案根目錄。", "error")
-        return redirect(url_for('index'))
-
-    try:
-        count = 0
-        # 偵測編碼
-        try:
-            with open(TARGET_FILE, 'r', encoding='utf-8') as f:
-                rows = list(csv.reader(f))
-        except UnicodeDecodeError:
-            with open(TARGET_FILE, 'r', encoding='cp950') as f: # Big5 for traditional Chinese
-                rows = list(csv.reader(f))
-
-        with get_db_connection() as conn:
-            today = datetime.now().date()
-            for row in rows:
-                if len(row) >= 2 and row[0].strip():
-                    front = row[0].strip()
-                    back = row[1].strip()
-                    # 檢查是否有第三欄，且內容為 'spell'
-                    card_type = 'spell' if len(row) > 2 and row[2].strip().lower() == 'spell' else 'recognize'
-                    conn.execute("INSERT INTO cards (front, back, next_review, card_type, deck_id, interval, repetition, ef) VALUES (?, ?, ?, ?, ?, 0, 0, 2.5)", 
-                                 (front, back, today, card_type, deck_id))
-                    count += 1
-        
-        # 封存檔案
-        if not os.path.exists(PROCESSED_DIR):
-            os.makedirs(PROCESSED_DIR)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.move(TARGET_FILE, os.path.join(PROCESSED_DIR, f"data_{ts}.csv"))
-
-        flash(f"✅ 成功匯入 {count} 張新卡片！", "success")
-
-    except Exception as e:
-        flash(f"⚠️ 匯入失敗: {e}", "error")
-        shutil.move(TARGET_FILE, f"error_{int(time.time())}.csv")
-
-    return redirect(url_for('index'))
-
-
 @app.route('/import/paste', methods=['GET', 'POST'])
 def import_paste():
     with get_db_connection() as conn:

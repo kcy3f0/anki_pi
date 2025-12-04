@@ -674,9 +674,10 @@ def api_make_sentence():
     return jsonify({'sentence': sentence})
 
 # --- 工具：匯入 & 重置 ---
-@app.route('/import', methods=['POST'])
-def import_cards():
-    deck_id = request.form.get('deck_id')
+@app.route('/import/paste', methods=['GET', 'POST'])
+def import_paste():
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
         if request.method == 'POST':
             csv_data = request.form.get('csv_data')
@@ -692,8 +693,6 @@ def import_cards():
                 return redirect(url_for('import_paste'))
                 
             try:
-                # 使用 io.StringIO 將字串模擬成檔案
-                import io
                 file_like_object = io.StringIO(csv_data)
                 rows = list(csv.reader(file_like_object))
                 

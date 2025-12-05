@@ -369,7 +369,13 @@
 <body>
     <header>
         <h1><a href="/">Pi Anki</a></h1>
-        <button class="theme-switch" id="theme-toggle-btn" aria-label="Toggle Dark Mode">☀️</button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {% if current_user.is_authenticated %}
+                <span style="font-size: 0.9rem; color: var(--text-color);">Hi, {{ current_user.username }}</span>
+                <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;">登出</a>
+            {% endif %}
+            <button class="theme-switch" id="theme-toggle-btn" aria-label="Toggle Dark Mode">☀️</button>
+        </div>
     </header>
     
     <main>

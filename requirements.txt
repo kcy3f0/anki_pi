@@ -3,3 +3,5 @@ requests
 python-dotenv
 edge-tts
 gTTS
+flask-login
+werkzeug

@@ -12,12 +12,49 @@ import uuid
 import os
 from gtts import gTTS
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from config import DB_NAME, MODEL_NAME, OLLAMA_API_URL, SECRET_KEY
 
 app = Flask(__name__)
 # 從環境變數讀取 SECRET_KEY，如果找不到則使用一個預設值 (僅供開發)
 app.secret_key = SECRET_KEY
+
+# --- Flask-Login 設定 ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+class User(UserMixin):
+    def __init__(self, id, username, password_hash):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+
+    @staticmethod
+    def get(user_id):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return None
+            return User(id=user['id'], username=user['username'], password_hash=user['password_hash'])
+
+    @staticmethod
+    def get_by_username(username):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+            if not user:
+                return None
+            return User(id=user['id'], username=user['username'], password_hash=user['password_hash'])
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
 
 # --- 資料庫初始化 ---
 def get_db_connection():
@@ -66,18 +103,43 @@ def init_db():
             print("資料庫結構已成功升級至新版！")
 
         # --- Standard Table Creation (for new setup or after migration) ---
+        # 建立 users 表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL
+            )
+        ''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS folders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
+                name TEXT NOT NULL,
+                user_id INTEGER,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS decks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
+                name TEXT NOT NULL,
+                user_id INTEGER,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         ''')
+
+        # 檢查並新增 user_id 欄位 (Folders)
+        cursor.execute("PRAGMA table_info(folders)")
+        folder_columns = [column[1] for column in cursor.fetchall()]
+        if 'user_id' not in folder_columns:
+            cursor.execute("ALTER TABLE folders ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+
+        # 檢查並新增 user_id 欄位 (Decks)
+        cursor.execute("PRAGMA table_info(decks)")
+        deck_columns = [column[1] for column in cursor.fetchall()]
+        if 'user_id' not in deck_columns:
+            cursor.execute("ALTER TABLE decks ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
 
         # Cleanup potential duplicates in deck_folders before creating constraint if it was missing
         try:
@@ -200,13 +262,99 @@ def ask_ollama(prompt):
 
 # --- 路由設定 ---
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        user = User.get_by_username(username)
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            flash('登入成功！', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('帳號或密碼錯誤。', 'error')
+
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        if not username or not password:
+            flash('請填寫所有欄位。', 'error')
+            return redirect(url_for('register'))
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # 檢查使用者是否已存在
+            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if cursor.fetchone():
+                flash('此帳號已被註冊。', 'error')
+                return redirect(url_for('register'))
+
+            # 檢查是否為系統第一位使用者 (用於資料遷移)
+            cursor.execute("SELECT COUNT(*) FROM users")
+            user_count = cursor.fetchone()[0]
+            is_first_user = (user_count == 0)
+
+            # 建立新使用者
+            password_hash = generate_password_hash(password)
+            cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
+            new_user_id = cursor.lastrowid
+
+            # 如果是第一位使用者，將既有的無主資料歸戶給他
+            if is_first_user:
+                print(f"First user detected (ID: {new_user_id}). Migrating orphan data...")
+                cursor.execute("UPDATE folders SET user_id = ? WHERE user_id IS NULL", (new_user_id,))
+                cursor.execute("UPDATE decks SET user_id = ? WHERE user_id IS NULL", (new_user_id,))
+                conn.commit()
+                flash('註冊成功！您是第一位使用者，已自動接收現有資料。', 'success')
+            else:
+                conn.commit()
+                # 為新使用者建立預設資料夾與牌組
+                try:
+                    cursor.execute("INSERT INTO folders (name, user_id) VALUES ('預設資料夾', ?)", (new_user_id,))
+                    default_folder_id = cursor.lastrowid
+                    cursor.execute("INSERT INTO decks (name, user_id) VALUES ('預設牌組', ?)", (new_user_id,))
+                    default_deck_id = cursor.lastrowid
+                    cursor.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (default_deck_id, default_folder_id))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error creating default data: {e}")
+
+                flash('註冊成功！請登入。', 'success')
+
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('您已登出。', 'success')
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     today = datetime.now().date()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM folders ORDER BY name")
+        # 只選取當前使用者的資料夾
+        cursor.execute("SELECT * FROM folders WHERE user_id = ? ORDER BY name", (current_user.id,))
         folders = cursor.fetchall()
         
         folders_with_decks = []
@@ -216,6 +364,7 @@ def index():
             folder_dict = dict(folder)
             
             # New query using the many-to-many junction table
+            # 同樣需要過濾 decks.user_id (雖然理論上 folder 是使用者的，裡面的 deck 也應該是，但雙重保險)
             cursor.execute("""
                 SELECT 
                     d.id, 
@@ -224,10 +373,10 @@ def index():
                 FROM decks d
                 JOIN deck_folders df ON d.id = df.deck_id
                 LEFT JOIN cards c ON d.id = c.deck_id AND c.next_review <= ?
-                WHERE df.folder_id = ?
+                WHERE df.folder_id = ? AND d.user_id = ?
                 GROUP BY d.id, d.name
                 ORDER BY d.name
-            """, (today, folder['id']))
+            """, (today, folder['id'], current_user.id))
             decks_with_due_counts = cursor.fetchall()
             
             folder_dict['decks'] = decks_with_due_counts
@@ -236,17 +385,20 @@ def index():
             
             folders_with_decks.append(folder_dict)
 
+        # 列出所有卡片 (用於下方總覽)，需 JOIN decks 並檢查 deck 的 user_id
         cursor.execute("""
             SELECT c.front, c.back, c.next_review, c.card_type, d.name as deck_name
             FROM cards c
             JOIN decks d ON c.deck_id = d.id
+            WHERE d.user_id = ?
             ORDER BY c.next_review
-        """)
+        """, (current_user.id,))
         cards = cursor.fetchall()
         
     return render_template('index.html', folders=folders_with_decks, cards=cards, total_due_count=total_due_count)
 
 @app.route('/decks', methods=['GET', 'POST'])
+@login_required
 def manage_decks():
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -258,97 +410,130 @@ def manage_decks():
                 folder_name = request.form.get('folder_name')
                 if folder_name:
                     try:
-                        cursor.execute("INSERT INTO folders (name) VALUES (?)", (folder_name,))
-                        flash(f"成功新增資料夾: {folder_name}", "success")
-                    except sqlite3.IntegrityError:
-                        flash(f"⚠️ 資料夾名稱「{folder_name}」已存在。", "error")
+                        # 檢查該使用者是否已有同名資料夾
+                        cursor.execute("SELECT id FROM folders WHERE name = ? AND user_id = ?", (folder_name, current_user.id))
+                        if cursor.fetchone():
+                            flash(f"⚠️ 資料夾名稱「{folder_name}」已存在。", "error")
+                        else:
+                            cursor.execute("INSERT INTO folders (name, user_id) VALUES (?, ?)", (folder_name, current_user.id))
+                            flash(f"成功新增資料夾: {folder_name}", "success")
+                    except Exception as e:
+                         flash(f"錯誤: {e}", "error")
 
             elif action == 'add_deck':
                 deck_name = request.form.get('deck_name')
                 if deck_name:
                     try:
-                        cursor.execute("INSERT INTO decks (name) VALUES (?)", (deck_name,))
-                        deck_id = cursor.lastrowid
-                        
-                        # Automatically add to default folder
-                        cursor.execute("SELECT id FROM folders WHERE name = '預設資料夾'")
-                        default_folder = cursor.fetchone()
-                        if default_folder:
-                            cursor.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, default_folder['id']))
+                         # 檢查該使用者是否已有同名牌組
+                        cursor.execute("SELECT id FROM decks WHERE name = ? AND user_id = ?", (deck_name, current_user.id))
+                        if cursor.fetchone():
+                             flash(f"⚠️ 牌組名稱「{deck_name}」已存在。", "error")
+                        else:
+                            cursor.execute("INSERT INTO decks (name, user_id) VALUES (?, ?)", (deck_name, current_user.id))
+                            deck_id = cursor.lastrowid
 
-                        flash(f"成功新增牌組: {deck_name}", "success")
-                    except sqlite3.IntegrityError:
-                        flash(f"⚠️ 牌組名稱「{deck_name}」已存在。", "error")
+                            # Automatically add to default folder OF THE CURRENT USER
+                            cursor.execute("SELECT id FROM folders WHERE name = '預設資料夾' AND user_id = ?", (current_user.id,))
+                            default_folder = cursor.fetchone()
+                            if default_folder:
+                                cursor.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, default_folder['id']))
+
+                            flash(f"成功新增牌組: {deck_name}", "success")
+                    except Exception as e:
+                        flash(f"錯誤: {e}", "error")
 
             elif action == 'edit_folder':
                 folder_id = request.form.get('folder_id')
                 new_folder_name = request.form.get('new_folder_name')
+                # 確保只能修改自己的資料夾
                 if folder_id and new_folder_name:
-                    try:
+                    cursor.execute("SELECT id FROM folders WHERE id = ? AND user_id = ?", (folder_id, current_user.id))
+                    if cursor.fetchone():
                         cursor.execute("UPDATE folders SET name = ? WHERE id = ?", (new_folder_name, folder_id))
                         flash(f"資料夾名稱已更新為: {new_folder_name}", "success")
-                    except sqlite3.IntegrityError:
-                        flash(f"⚠️ 資料夾名稱「{new_folder_name}」已存在。", "error")
+                    else:
+                        flash("權限不足或資料夾不存在。", "error")
 
             elif action == 'edit_deck_name':
                 deck_id = request.form.get('deck_id')
                 new_deck_name = request.form.get('new_deck_name')
                 if deck_id and new_deck_name:
-                    try:
+                     # 確保只能修改自己的牌組
+                    cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+                    if cursor.fetchone():
                         cursor.execute("UPDATE decks SET name = ? WHERE id = ?", (new_deck_name, deck_id))
                         flash("牌組名稱已更新。", "success")
-                    except sqlite3.IntegrityError:
-                        flash(f"⚠️ 牌組名稱「{new_deck_name}」已存在。", "error")
+                    else:
+                        flash("權限不足或牌組不存在。", "error")
 
             elif action == 'delete_folder':
                 folder_id = request.form.get('folder_id')
                 if folder_id:
-                    # ON DELETE CASCADE will handle deck_folders entries
-                    cursor.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
-                    flash("已成功刪除資料夾。", "success")
+                     # 確保只能刪除自己的資料夾
+                    cursor.execute("DELETE FROM folders WHERE id = ? AND user_id = ?", (folder_id, current_user.id))
+                    if cursor.rowcount > 0:
+                        flash("已成功刪除資料夾。", "success")
+                    else:
+                         flash("權限不足或資料夾不存在。", "error")
 
             elif action == 'delete_deck':
                 deck_id = request.form.get('deck_id')
                 if deck_id:
-                    # ON DELETE CASCADE will handle cards and deck_folders entries
-                    cursor.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
-                    flash("已成功刪除牌組及所有相關內容。", "success")
+                     # 確保只能刪除自己的牌組
+                    cursor.execute("DELETE FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+                    if cursor.rowcount > 0:
+                        flash("已成功刪除牌組及所有相關內容。", "success")
+                    else:
+                        flash("權限不足或牌組不存在。", "error")
             
             conn.commit()
             return redirect(url_for('manage_decks'))
 
         # For GET request
-        cursor.execute("SELECT * FROM folders ORDER BY name")
+        cursor.execute("SELECT * FROM folders WHERE user_id = ? ORDER BY name", (current_user.id,))
         folders = cursor.fetchall()
         
-        # Get all decks and the folders they belong to
+        # Get all decks and the folders they belong to (Filtered by user)
         cursor.execute("""
             SELECT d.id, d.name, GROUP_CONCAT(f.name) as folder_names
             FROM decks d
             LEFT JOIN deck_folders df ON d.id = df.deck_id
             LEFT JOIN folders f ON df.folder_id = f.id
+            WHERE d.user_id = ?
             GROUP BY d.id
             ORDER BY d.name
-        """)
+        """, (current_user.id,))
         decks = cursor.fetchall()
         
     return render_template('decks.html', decks=decks, folders=folders)
 
 @app.route('/folder/<int:folder_id>/manage', methods=['GET', 'POST'])
+@login_required
 def manage_folder_content(folder_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
-        # Check if folder exists
-        cursor.execute("SELECT * FROM folders WHERE id = ?", (folder_id,))
+        # Check if folder exists and belongs to user
+        cursor.execute("SELECT * FROM folders WHERE id = ? AND user_id = ?", (folder_id, current_user.id))
         folder = cursor.fetchone()
 
         if not folder:
-            return "Folder not found", 404
+            flash("資料夾不存在或權限不足。", "error")
+            return redirect(url_for('manage_decks'))
 
         if request.method == 'POST':
             selected_deck_ids = request.form.getlist('deck_ids')
             
+            # Security check: Ensure all selected decks belong to the user
+            # This prevents a user from adding someone else's deck to their folder
+            if selected_deck_ids:
+                placeholders = ','.join('?' for _ in selected_deck_ids)
+                cursor.execute(f"SELECT COUNT(*) FROM decks WHERE user_id = ? AND id IN ({placeholders})", [current_user.id] + selected_deck_ids)
+                count = cursor.fetchone()[0]
+                if count != len(selected_deck_ids):
+                    flash("錯誤：試圖加入不屬於您的牌組。", "error")
+                    return redirect(url_for('manage_folder_content', folder_id=folder_id))
+
             # Update the associations for this folder
             cursor.execute("DELETE FROM deck_folders WHERE folder_id = ?", (folder_id,))
             if selected_deck_ids:
@@ -362,7 +547,8 @@ def manage_folder_content(folder_id):
         # GET request
         # Folder is already fetched above
 
-        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        # Only list decks belonging to the current user
+        cursor.execute("SELECT id, name FROM decks WHERE user_id = ? ORDER BY name", (current_user.id,))
         all_decks = cursor.fetchall()
         
         cursor.execute("SELECT deck_id FROM deck_folders WHERE folder_id = ?", (folder_id,))
@@ -375,6 +561,7 @@ def manage_folder_content(folder_id):
 
 
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_card():
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -390,6 +577,12 @@ def add_card():
                 flash("請選擇一個牌組！", "error")
                 return redirect(url_for('add_card'))
 
+            # Verify deck ownership
+            cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+            if not cursor.fetchone():
+                flash("無效的牌組。", "error")
+                return redirect(url_for('add_card'))
+
             cursor.execute(
                 "INSERT INTO cards (front, back, next_review, card_type, deck_id, interval, repetition, ef) VALUES (?, ?, ?, ?, ?, 0, 0, 2.5)",
                 (front, back, today, card_type, deck_id)
@@ -398,18 +591,25 @@ def add_card():
             flash(f"成功新增卡片: {front}", "success")
             return redirect(url_for('add_card'))
 
-        # GET request: Fetch a flat list of all decks
-        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        # GET request: Fetch a flat list of all decks for current user
+        cursor.execute("SELECT id, name FROM decks WHERE user_id = ? ORDER BY name", (current_user.id,))
         decks = cursor.fetchall()
         
     return render_template('add.html', decks=decks)
 # --- 傳統學習模式 (含隨機中英切換) ---
 @app.route('/study/<int:deck_id>')
+@login_required
 def study(deck_id):
     today = datetime.now().date()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
+        # Verify deck ownership
+        cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+        if not cursor.fetchone():
+            flash("權限不足或牌組不存在。", "error")
+            return redirect(url_for('index'))
+
         cursor.execute("SELECT COUNT(id) FROM cards WHERE next_review <= ? AND deck_id = ?", (today, deck_id))
         due_count = cursor.fetchone()[0]
         
@@ -435,10 +635,17 @@ def study(deck_id):
         return render_template('study.html', card=None, due_count=0, deck_id=deck_id)
 
 @app.route('/study/folder/<int:folder_id>')
+@login_required
 def study_folder(folder_id):
     today = datetime.now().date()
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # Verify folder ownership
+        cursor.execute("SELECT id FROM folders WHERE id = ? AND user_id = ?", (folder_id, current_user.id))
+        if not cursor.fetchone():
+            flash("權限不足或資料夾不存在。", "error")
+            return redirect(url_for('index'))
 
         # Get all deck_ids for the folder
         cursor.execute("SELECT deck_id FROM deck_folders WHERE folder_id = ?", (folder_id,))
@@ -477,10 +684,18 @@ def study_folder(folder_id):
         return render_template('study.html', card=None, due_count=0, folder_id=folder_id)
 
 @app.route('/answer/<int:card_id>/<int:quality>')
+@login_required
 def answer(card_id, quality):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT interval, repetition, ef FROM cards WHERE id = ?", (card_id,))
+
+        # Ensure card belongs to a deck owned by current user
+        cursor.execute("""
+            SELECT c.interval, c.repetition, c.ef
+            FROM cards c
+            JOIN decks d ON c.deck_id = d.id
+            WHERE c.id = ? AND d.user_id = ?
+        """, (card_id, current_user.id))
         data = cursor.fetchone()
         
         if data:
@@ -533,15 +748,31 @@ def ai_check():
 # --- 速記/滑動模式 (API 支援) ---
 
 @app.route('/swipe_mode/<int:deck_id>')
+@login_required
 def swipe_mode(deck_id):
+    # Check ownership
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+        if not cursor.fetchone():
+            flash("權限不足或牌組不存在。", "error")
+            return redirect(url_for('index'))
+
     # 載入速記模式的前端介面
     return render_template('swipe_mode.html', deck_id=deck_id)
 
 @app.route('/api/daily_batch/<int:deck_id>')
+@login_required
 def api_daily_batch(deck_id):
     today = datetime.now().date()
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # Verify ownership
+        cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Unauthorized or deck not found'}), 403
+
         cursor.execute("SELECT * FROM cards WHERE next_review <= ? AND deck_id = ?", (today, deck_id))
         cards = cursor.fetchall()
 
@@ -643,6 +874,7 @@ def api_tts():
 
 
 @app.route('/api/sync_batch', methods=['POST'])
+@login_required
 def api_sync_batch():
     data = request.json
     results = data.get('results', [])
@@ -658,7 +890,13 @@ def api_sync_batch():
             # 轉換為 SM-2 品質分數
             quality = 5 if direction == 'right' else 0
             
-            cursor.execute("SELECT interval, repetition, ef FROM cards WHERE id = ?", (card_id,))
+            # Ensure card ownership via join
+            cursor.execute("""
+                SELECT c.interval, c.repetition, c.ef
+                FROM cards c
+                JOIN decks d ON c.deck_id = d.id
+                WHERE c.id = ? AND d.user_id = ?
+            """, (card_id, current_user.id))
             row = cursor.fetchone()
 
             if row:
@@ -679,6 +917,7 @@ def api_sync_batch():
     return jsonify({'status': 'success'})
 
 @app.route('/api/make_sentence', methods=['POST'])
+@login_required
 def api_make_sentence():
     word = request.json.get('word')
     if not word:
@@ -691,6 +930,7 @@ def api_make_sentence():
 
 # --- 工具：匯入 & 重置 ---
 @app.route('/import/paste', methods=['GET', 'POST'])
+@login_required
 def import_paste():
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -704,6 +944,12 @@ def import_paste():
                 flash("⚠️ 請選擇要匯入的牌組。", "error")
                 return redirect(url_for('import_paste'))
             
+            # Verify deck ownership
+            cursor.execute("SELECT id FROM decks WHERE id = ? AND user_id = ?", (deck_id, current_user.id))
+            if not cursor.fetchone():
+                flash("無效的牌組。", "error")
+                return redirect(url_for('import_paste'))
+
             if not csv_data:
                 flash("⚠️ 沒有貼上任何內容。", "error")
                 return redirect(url_for('import_paste'))
@@ -730,32 +976,47 @@ def import_paste():
                 flash(f"⚠️ 匯入失敗: {e}", "error")
                 return redirect(url_for('import_paste'))
 
-        # GET request: Fetch a flat list of all decks
-        cursor.execute("SELECT id, name FROM decks ORDER BY name")
+        # GET request: Fetch a flat list of all decks for current user
+        cursor.execute("SELECT id, name FROM decks WHERE user_id = ? ORDER BY name", (current_user.id,))
         decks = cursor.fetchall()
 
     return render_template('import_paste.html', decks=decks)
 
 
 @app.route('/reset_progress', methods=['POST'])
+@login_required
 def reset_progress():
     today = datetime.now().date()
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # 將所有卡片重置為全新狀態
+        # 只重置屬於當前使用者的卡片
         cursor.execute("""
             UPDATE cards 
             SET interval = 0, repetition = 0, ef = 2.5, next_review = ?
-        """, (today,))
+            WHERE id IN (
+                SELECT c.id FROM cards c
+                JOIN decks d ON c.deck_id = d.id
+                WHERE d.user_id = ?
+            )
+        """, (today, current_user.id))
         conn.commit()
     flash("已重置所有卡片進度。", "success")
     return redirect(url_for('index'))
 
 @app.route('/delete_all_cards', methods=['POST'])
+@login_required
 def delete_all_cards():
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM cards")
+        # 只刪除屬於當前使用者的卡片
+        cursor.execute("""
+            DELETE FROM cards
+            WHERE id IN (
+                SELECT c.id FROM cards c
+                JOIN decks d ON c.deck_id = d.id
+                WHERE d.user_id = ?
+            )
+        """, (current_user.id,))
         conn.commit()
     flash("已成功刪除所有卡片。", "success")
     return redirect(url_for('index'))

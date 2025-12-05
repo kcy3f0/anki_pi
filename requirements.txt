@@ -1,7 +1,5 @@
 flask
 requests
 python-dotenv
-Flask-Login
-flask-login 
- 
- 
+edge-tts
+gTTS

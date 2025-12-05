@@ -81,6 +81,25 @@ def init_db():
                 name TEXT NOT NULL UNIQUE
             )
         ''')
+
+        # Cleanup potential duplicates in deck_folders before creating constraint if it was missing
+        try:
+             # Check if table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='deck_folders'")
+            if cursor.fetchone():
+                # We can't easily check for constraint presence in SQLite without parsing sql
+                # But we can try to delete duplicates directly using rowid
+                cursor.execute("""
+                    DELETE FROM deck_folders
+                    WHERE rowid NOT IN (
+                        SELECT MIN(rowid)
+                        FROM deck_folders
+                        GROUP BY deck_id, folder_id
+                    )
+                """)
+        except Exception as e:
+            print(f"Warning during duplicate cleanup: {e}")
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS deck_folders (
                 deck_id INTEGER NOT NULL,

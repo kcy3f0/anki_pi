@@ -335,6 +335,7 @@
 
     <script>
         const deckId = {{ deck_id }};
+        const csrfToken = "{{ csrf_token() }}";
         let dbPromise;
         let currentCard = null;
         let studyQueue = [];
@@ -598,7 +599,10 @@
                     try {
                         const res = await fetch('/api/make_sentence', {
                             method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrfToken
+                            },
                             body: JSON.stringify({ word: targetWord })
                         });
                         const data = await res.json();
@@ -728,7 +732,10 @@
             try {
                 const res = await fetch('/api/sync_batch', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
                     body: JSON.stringify({ results: items })
                 });
 

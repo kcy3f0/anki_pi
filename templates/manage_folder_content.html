@@ -9,6 +9,7 @@
 
     <div class="card">
         <form method="POST" action="{{ url_for('manage_folder_content', folder_id=folder.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="d-flex justify-between align-center mb-2">
                 <h4 style="margin: 0;">選擇要包含的牌組</h4>
                 <div class="text-secondary" style="font-size: 0.9rem;">

@@ -5,6 +5,7 @@
         <div style="white-space: pre-wrap; background: #eef; padding: 15px;">{{ question }}</div>
         <button type="button" onclick="speakText(document.querySelector('div[style*=\'white-space: pre-wrap\']').innerText)" class="btn btn-gray">🔊 朗讀</button>
         <form action="/ai_check" method="POST" style="margin-top: 20px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="question" value="{{ question }}">
             <input type="text" name="user_answer" placeholder="輸入答案..." required autocomplete="off">
             <button type="submit" class="btn btn-blue">批改</button>

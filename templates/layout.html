@@ -404,6 +404,8 @@
     </div>
 
     <script>
+        const csrfToken = "{{ csrf_token() }}";
+
         // Theme toggling logic...
         (function() {
             const toggleBtn = document.getElementById('theme-toggle-btn');
@@ -467,6 +469,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
                         },
                         body: JSON.stringify({ word: word }),
                     });

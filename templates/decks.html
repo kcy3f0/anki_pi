@@ -13,6 +13,7 @@
                 <h4>新增資料夾</h4>
             </div>
             <form method="POST" action="{{ url_for('manage_decks') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="add_folder">
                 <input type="text" name="folder_name" placeholder="例如：英文單字、歷史考題..." required>
                 <div class="text-center">
@@ -26,6 +27,7 @@
                 <h4>新增牌組</h4>
             </div>
             <form method="POST" action="{{ url_for('manage_decks') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="add_deck">
                 <input type="text" name="deck_name" placeholder="例如：第一課單字..." required>
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">
@@ -54,6 +56,7 @@
                                 <a href="{{ url_for('manage_folder_content', folder_id=folder.id) }}" class="btn btn-primary btn-sm">管理內容</a>
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('folder', {{ folder.id }})">編輯名稱</button>
                                 <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ folder.name }}」資料夾嗎？');" style="margin: 0; display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action" value="delete_folder">
                                     <input type="hidden" name="folder_id" value="{{ folder.id }}">
                                     <button type="submit" class="btn btn-red btn-sm">刪除</button>
@@ -62,6 +65,7 @@
                         </div>
                         <div id="folder-edit-{{ folder.id }}" class="edit-form" style="display: none;">
                             <form method="POST" action="{{ url_for('manage_decks') }}" class="d-flex gap-2 align-center" style="margin: 0;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="edit_folder">
                                 <input type="hidden" name="folder_id" value="{{ folder.id }}">
                                 <input type="text" name="new_folder_name" value="{{ folder.name }}" required style="margin: 0; flex-grow: 1;">
@@ -102,6 +106,7 @@
                             <div class="action-buttons">
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('deck', {{ deck.id }})">編輯名稱</button>
                                 <form method="POST" action="{{ url_for('manage_decks') }}" onsubmit="return confirm('確定要刪除「{{ deck.name }}」牌組嗎？此牌組中的所有卡片也會被刪除！');" style="margin: 0; display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action" value="delete_deck">
                                     <input type="hidden" name="deck_id" value="{{ deck.id }}">
                                     <button type="submit" class="btn btn-red btn-sm">刪除</button>
@@ -110,6 +115,7 @@
                         </div>
                         <div id="deck-edit-{{ deck.id }}" class="edit-form" style="display: none;">
                             <form method="POST" action="{{ url_for('manage_decks') }}" class="d-flex gap-2 align-center" style="margin: 0;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="edit_deck_name">
                                 <input type="hidden" name="deck_id" value="{{ deck.id }}">
                                 <input type="text" name="new_deck_name" value="{{ deck.name }}" required style="margin: 0; flex-grow: 1;">

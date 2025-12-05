@@ -14,10 +14,12 @@ from gtts import gTTS
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
 from datetime import datetime, timedelta
 from config import DB_NAME, MODEL_NAME, OLLAMA_API_URL, SECRET_KEY
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
 # 從環境變數讀取 SECRET_KEY，如果找不到則使用一個預設值 (僅供開發)
 app.secret_key = SECRET_KEY
+csrf = CSRFProtect(app)
 
 # --- 資料庫初始化 ---
 def get_db_connection():

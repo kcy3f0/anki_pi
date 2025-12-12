@@ -5,10 +5,10 @@
 ## ✨ 主要功能
 
 - **🧠 間隔重複 (Spaced Repetition):** 內建 [SM-2 演算法](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm)，根據你的記憶曲線自動安排複習時間。
-- **📚 多元學習模式:**
-    - **傳統模式:** 標準的問答學習。
-    - **滑動模式:** 類似 Tinder 的左右滑動操作，快速複習。
-    - **AI 隨堂考:** 整合 [Ollama](https://ollama.ai/)，讓大型語言模型 (LLM) 動態出題，增加學習挑戰性。
+- **🔊 語音朗讀 (TTS):** 支援 Text-to-Speech，可點擊喇叭圖示聆聽單字或句子發音（使用 Microsoft Edge TTS 或 Google TTS）。
+- **📚 學習模式:**
+    - **傳統模式:** 標準的翻卡式學習，支援「只要認得」與「需要會拼」兩種卡片類型。
+    - **AI 隨堂考:** 在學習過程中，可隨時呼叫 AI (整合 [Ollama](https://ollama.ai/)) 針對當前單字進行生活化造句，或進行隨機出題測驗。
 - **📂 方便的卡片管理:**
     - 手動新增單字卡。
     - 支援從 CSV 格式貼上內容批次匯入。
@@ -25,15 +25,19 @@
 - **前端:** 原生 HTML/CSS/JavaScript
 - **資料庫:** SQLite
 - **AI 整合:** Ollama (可接入 Gemma, Llama3, Mistral 等模型)
+- **語音:** edge-tts, gTTS
 - **通知:** Discord Webhook
 
 ---
 
 ## 🚀 快速開始
 
-### 1. 環境設定
+我們提供了一個自動化安裝腳本 `install.sh`，可以幫你一次完成系統更新、依賴安裝、環境設定、服務啟動以及每日提醒排程。
+
+### 1. 環境設定與安裝
 
 **前置需求:**
+- 樹莓派 OS (Raspberry Pi OS) 或其他基於 Debian/Ubuntu 的 Linux 系統
 - Python 3.x
 - 已安裝 Ollama 的伺服器 (可與本應用程式在不同電腦)
 
@@ -45,44 +49,30 @@
     cd anki_pi
     ```
 
-2.  **安裝依賴:**
-    *(建議先建立並啟用虛擬環境)*
+2.  **執行安裝腳本:**
+    *(請直接執行，不要加 sudo，腳本會在需要時自動請求權限)*
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    pip install -r requirements.txt
+    ./install.sh
     ```
 
-3.  **設定環境變數:**
-    - 複製範例檔案 `.env.example` 為 `.env`。
-      ```bash
-      cp .env.example .env
-      ```
-    - **(重要)** 編輯 `.env` 檔案，填入你自己的設定值：
-      - `SECRET_KEY`: Flask 應用程式的密鑰，請務必更換成一個複雜且隨機的字串。
-      - `OLLAMA_API_URL`: 你運行 Ollama 電腦的 IP 位址和 API 端點。
-      - `DISCORD_WEBHOOK_URL`: 你的 Discord Webhook 網址。
+    安裝過程中，腳本會提示你輸入以下資訊：
+    - `SECRET_KEY`: 按 Enter 可自動生成隨機密鑰。
+    - `OLLAMA_API_URL`: 輸入 Ollama 伺服器的位置 (預設為 `http://127.0.0.1:11434/api/generate`)。
+    - `DISCORD_WEBHOOK_URL`: (選填) 輸入你的 Discord Webhook 網址以啟用通知。
 
-4.  **設定應用程式配置 (config.py):**
-    - 編輯 `config.py` 檔案，你可以調整其中的非敏感設定，例如：
-      - `MODEL_NAME`: 你希望 Ollama 使用的模型名稱。
-      - `DB_NAME`: 應用程式使用的資料庫名稱。
+3.  **完成!**
+    腳本執行完畢後，服務會自動啟動。
+    - **訪問應用:** 在瀏覽器中打開 `http://<你的樹莓派IP>:10000`
+    - **每日提醒:** 腳本已自動設定每天早上 09:00 執行提醒檢查。
 
-5.  **修改排程任務腳本 (可選):**
-    - 如果要使用每日提醒功能，請編輯 `reminder.sh`，將檔案中的 `/path/to/your/project/` 修改為你專案的 **絕對路徑**。
+### 手動安裝 (進階使用者)
 
-### 3. 啟動應用
+如果你不想使用自動化腳本，可以參考以下步驟：
 
-1.  **初始化資料庫:**
-    第一次啟動時，應用程式會自動建立 `flashcards.db` 資料庫檔案。
-
-2.  **啟動 Web 伺服器:**
-    ```bash
-    python app.py
-    ```
-
-3.  **訪問應用:**
-    在瀏覽器中打開 `http://<你的樹莓派IP>:10000` 即可開始使用。
+1.  建立並啟用 Python 虛擬環境 (`python -m venv venv`, `source venv/bin/activate`)。
+2.  安裝依賴 (`pip install -r requirements.txt`)。
+3.  複製 `.env.example` 為 `.env` 並填寫設定。
+4.  初始化資料庫並啟動 (`python app.py`)。
 
 ---
 
@@ -111,30 +101,21 @@
 
 ### 學習
 
-- **滑動學習:** 適合快速、大量的複習。左滑代表 "忘記"，右滑代表 "記得"。會根據卡片類型調整出題方式 (詳見上方 **卡片類型說明**)。
-- **傳統學習:** 傳統的翻卡片模式，提供 "忘記"、"困難"、"普通"、"簡單" 四個選項，對應不同的 SM-2 演算法評分。會根據卡片類型調整出題方式 (詳見上方 **卡片類型說明**)。
-- **AI 隨堂考:** 讓 AI 給你出其不意的題目，考驗你的真實力。
+- **開始學習:** 點擊首頁的資料夾或牌組即可開始。
+- **學習流程:**
+    1.  顯示卡片正面 (或背面，視卡片類型與隨機機制而定)。
+    2.  可點擊 🔊 播放發音。
+    3.  思考答案後，點擊「顯示答案」。
+    4.  **AI 輔助:** 在答案頁面，可以點擊「✨ AI 造句」讓 AI 生成例句幫助記憶。
+    5.  **評分:** 根據你的記憶程度選擇 "忘記"、"困難"、"普通"、"簡單"，系統將依此安排下次複習時間。
 
-### 設定每日提醒
+### 每日提醒
 
-你可以使用 `cron` 來設定每日自動提醒。
-
-1.  **給予 `reminder.sh` 執行權限:**
-    ```bash
-    chmod +x reminder.sh
-    ```
-
-2.  **編輯 `crontab`:**
-    ```bash
-    crontab -e
-    ```
-
-3.  **加入排程:**
-    例如，設定每天早上 9 點執行提醒：
-    ```
-    0 9 * * * /path/to/your/project/reminder.sh
-    ```
-    *(請確保路徑正確)*
+`install.sh` 腳本已經自動設定了 crontab。
+若需要修改提醒時間，請執行 `crontab -e` 並修改對應的行：
+```
+0 9 * * * /path/to/your/project/run_reminder.sh >> ...
+```
 
 ## 🤝 貢獻
 

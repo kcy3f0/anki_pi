@@ -5,13 +5,13 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 ## ✨ Main Features
 
 - **🧠 Spaced Repetition:** Built-in [SM-2 algorithm](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm) automatically schedules review times based on your memory curve.
-- **📚 Diverse Learning Modes:**
-    - **Traditional Mode:** Standard question-and-answer learning.
-    - **Swipe Mode:** Tinder-like swipe gestures for quick review.
-    - **AI Quiz:** Integrates [Ollama](https://ollama.ai/) to dynamically generate quizzes using Large Language Models (LLMs), adding a challenge to learning.
+- **🔊 Text-to-Speech (TTS):** Supports TTS, allowing you to click the speaker icon to hear the pronunciation of words or sentences (uses Microsoft Edge TTS or Google TTS).
+- **📚 Learning Modes:**
+    - **Traditional Mode:** Standard flashcard learning supporting "Recognize Only" and "Need to Spell" card types.
+    - **AI Assistance:** During study, you can invoke AI (integrated with [Ollama](https://ollama.ai/)) to generate practical sentences for the current word or take random AI quizzes.
 - **📂 Convenient Card Management:**
     - Manually add new flashcards.
-    - Batch import cards via copy-paste.
+    - Batch import cards via copy-paste CSV content.
     - One-click reset of all learning progress.
 - **🔔 Discord Notifications:**
     - Daily reminders for cards due for review.
@@ -25,15 +25,19 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 - **Frontend:** Native HTML/CSS/JavaScript
 - **Database:** SQLite
 - **AI Integration:** Ollama (supports models like Gemma, Llama3, Mistral)
+- **Audio:** edge-tts, gTTS
 - **Notifications:** Discord Webhook
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Environment Setup
+We provide an automated installation script `install.sh` that handles system updates, dependency installation, environment configuration, service startup, and daily reminder scheduling in one go.
+
+### 1. Environment Setup & Installation
 
 **Prerequisites:**
+- Raspberry Pi OS or other Debian/Ubuntu-based Linux systems
 - Python 3.x
 - An Ollama server installed (can be on a different machine than this application)
 
@@ -45,44 +49,30 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
     cd anki_pi
     ```
 
-2.  **Install dependencies:**
-    *(It is recommended to create and activate a virtual environment first)*
+2.  **Run the installation script:**
+    *(Run directly, do not use sudo; the script will ask for permissions when needed)*
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    pip install -r requirements.txt
+    ./install.sh
     ```
 
-3.  **Configure Environment Variables:**
-    - Copy the example file `.env.example` to `.env`.
-      ```bash
-      cp .env.example .env
-      ```
-    - **(Important)** Edit the `.env` file and fill in your settings:
-      - `SECRET_KEY`: The secret key for your Flask application. Please make sure to change it to a complex and random string.
-      - `OLLAMA_API_URL`: The IP address and API endpoint of your Ollama server.
-      - `DISCORD_WEBHOOK_URL`: Your Discord Webhook URL.
+    During installation, the script will prompt you for:
+    - `SECRET_KEY`: Press Enter to automatically generate a random key.
+    - `OLLAMA_API_URL`: Enter your Ollama server URL (default is `http://127.0.0.1:11434/api/generate`).
+    - `DISCORD_WEBHOOK_URL`: (Optional) Enter your Discord Webhook URL to enable notifications.
 
-4.  **Configure Application Settings (config.py):**
-    - Edit the `config.py` file to adjust non-sensitive settings, such as:
-      - `MODEL_NAME`: The name of the Ollama model you want to use.
-      - `DB_NAME`: Database used by the application.
+3.  **Done!**
+    After the script finishes, the service will start automatically.
+    - **Access the App:** Open `http://<Your_Raspberry_Pi_IP>:10000` in your browser.
+    - **Daily Reminder:** The script has automatically scheduled a check every day at 09:00 AM.
 
-5.  **Modify Scheduled Task Script (Optional):**
-    - If you want to use the daily reminder feature, edit `reminder.sh` and change `/path/to/your/project/` to the **absolute path** of your project.
+### Manual Installation (Advanced Users)
 
-### 3. Launch Application
+If you prefer not to use the automated script:
 
-1.  **Initialize Database:**
-    The application will automatically create the `flashcards.db` database file on first launch.
-
-2.  **Start the Web Server:**
-    ```bash
-    python app.py
-    ```
-
-3.  **Access the Application:**
-    Open `http://<Your_Raspberry_Pi_IP>:10000` in your browser to start using it.
+1.  Create and activate a Python virtual environment (`python -m venv venv`, `source venv/bin/activate`).
+2.  Install dependencies (`pip install -r requirements.txt`).
+3.  Copy `.env.example` to `.env` and configure it.
+4.  Initialize the database and start the app (`python app.py`).
 
 ---
 
@@ -99,7 +89,7 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 
 - **Batch Import:**
     - Click "📋 Import by Paste" on the main screen.
-    - Paste your CSV content.
+    - Paste your CSV content, where each line represents a card.
     - Format:
         - First column "Front", second column "Back".
         - Example:
@@ -111,30 +101,21 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 
 ### Learn
 
-- **Swipe Learning:** Suitable for quick, large-volume review. Swipe left for "Forgot", swipe right for "Remembered". The quizzing method will adjust based on the card type (see **Card Type Description** above).
-- **Traditional Learning:** Classic flashcard mode, offering four options: "Forgot", "Difficult", "Normal", "Easy", corresponding to different SM-2 algorithm scores. The quizzing method will adjust based on the card type (see **Card Type Description** above).
-- **AI Quiz:** Let the AI give you unexpected questions to test your true ability.
+- **Start Learning:** Click on a folder or deck on the home page.
+- **Study Flow:**
+    1.  The front (or back, depending on card type and randomness) is displayed.
+    2.  Click 🔊 to hear the pronunciation.
+    3.  Think of the answer, then click "Show Answer".
+    4.  **AI Assistance:** On the answer page, click "✨ AI Sentence" to have AI generate an example sentence to help with memorization.
+    5.  **Rate:** Choose "Forgot", "Difficult", "Normal", or "Easy" based on your recall. The system will schedule the next review accordingly.
 
-### Set Daily Reminders
+### Daily Reminders
 
-You can use `cron` to set up daily automatic reminders.
-
-1.  **Grant execute permissions to `reminder.sh`:**
-    ```bash
-    chmod +x reminder.sh
-    ```
-
-2.  **Edit `crontab`:**
-    ```bash
-    crontab -e
-    ```
-
-3.  **Add a schedule:**
-    For example, to set reminders to run at 9 AM every day:
-    ```
-    0 9 * * * /path/to/your/project/reminder.sh
-    ```
-    *(Please ensure the path is correct)*
+The `install.sh` script automatically sets up the crontab.
+To modify the reminder time, run `crontab -e` and edit the corresponding line:
+```
+0 9 * * * /path/to/your/project/run_reminder.sh >> ...
+```
 
 ## 🤝 Contribution
 

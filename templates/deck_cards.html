@@ -73,7 +73,7 @@
 
         <div id="ai-modal-content">
             <p id="ai-loading" style="display: none; color: var(--text-secondary);">正在生成例句中...</p>
-            <div id="ai-result-text" style="white-space: pre-wrap; line-height: 1.6;"></div>
+            <div id="ai-result-text" class="markdown-body" style="line-height: 1.6;"></div>
             <div id="ai-error" style="display: none; color: var(--error-color); margin-top: 10px;"></div>
         </div>
 
@@ -111,7 +111,7 @@
         .then(data => {
             aiLoading.style.display = 'none';
             if (data.sentence) {
-                aiResultText.innerText = data.sentence;
+                aiResultText.innerHTML = DOMPurify.sanitize(marked.parse(data.sentence));
             } else if (data.error) {
                 aiError.innerText = data.error;
                 aiError.style.display = 'block';

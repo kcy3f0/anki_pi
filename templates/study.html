@@ -33,7 +33,7 @@
 
             <div id="ai-container" style="margin-bottom: 2rem; display: block;">
                 <button id="ai-btn" class="btn btn-special" data-word="{{ card.english_word if card else '' }}" style="border-radius: 20px; font-size: 0.9rem;" onclick="makeAiSentence(this.dataset.word)">✨ AI 造句</button>
-                <div id="ai-result" style="margin-top: 10px; padding: 10px; background: var(--success-bg); border-radius: 10px; color: var(--success-color); text-align: left; display: none; white-space: pre-wrap;"></div>
+                <div id="ai-result" class="markdown-body" style="margin-top: 10px; padding: 10px; background: var(--success-bg); border-radius: 10px; color: var(--success-color); text-align: left; display: none;"></div>
             </div>
 
             <p style="margin-bottom: 1rem; color: #888;">你對這個單字的印象如何？</p>
@@ -79,7 +79,11 @@
                     body: JSON.stringify({ word: word })
                 });
                 const data = await res.json();
-                aiResult.innerText = data.sentence || '生成失敗';
+                if (data.sentence) {
+                    aiResult.innerHTML = DOMPurify.sanitize(marked.parse(data.sentence));
+                } else {
+                    aiResult.innerText = '生成失敗';
+                }
             } catch (err) {
                 aiResult.innerText = '連線錯誤';
                 console.error(err);

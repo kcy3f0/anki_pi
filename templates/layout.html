@@ -283,6 +283,63 @@
             gap: 20px;
         }
 
+        /* Markdown Styling */
+        .markdown-body {
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+        }
+        .markdown-body p {
+            margin-bottom: 1em;
+        }
+        .markdown-body ul, .markdown-body ol {
+            padding-left: 1.5em;
+            margin-bottom: 1em;
+        }
+        .markdown-body li {
+            margin-bottom: 0.25em;
+        }
+        .markdown-body strong {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        [data-theme="dark"] .markdown-body strong {
+            color: var(--primary-color);
+        }
+        .markdown-body code {
+            background-color: rgba(0, 0, 0, 0.05);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        [data-theme="dark"] .markdown-body code {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .markdown-body pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            overflow: auto;
+            border-radius: 6px;
+            margin-bottom: 1em;
+        }
+        [data-theme="dark"] .markdown-body pre {
+            background-color: #1e1e1e;
+        }
+        .markdown-body pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-body blockquote {
+            padding: 0 1em;
+            color: var(--text-secondary);
+            border-left: 0.25em solid var(--border-color);
+            margin: 0 0 1em 0;
+        }
     </style>
 </head>
 <body>
@@ -304,6 +361,8 @@
         {% block content %}{% endblock %}
     </main>
     
+    <script src="{{ url_for('static', filename='js/marked.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/purify.min.js') }}"></script>
     <script>
         const csrfToken = "{{ csrf_token() }}";
 

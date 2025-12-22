@@ -139,6 +139,13 @@ def init_db():
         if 'card_type' not in card_columns:
             cursor.execute("ALTER TABLE cards ADD COLUMN card_type TEXT NOT NULL DEFAULT 'recognize'")
 
+        # --- Performance Indexes ---
+        # Add index for cards filtering by deck and review date (used in study mode and counts)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_deck_id_next_review ON cards(deck_id, next_review)")
+
+        # Add index for deck_folders filtering by folder_id (used in folder study and index grouping)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deck_folders_folder_id ON deck_folders(folder_id)")
+
         conn.commit()
 
 # --- SM-2 記憶演算法 ---

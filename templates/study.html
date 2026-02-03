@@ -31,11 +31,6 @@
                 </button>
             </div>
 
-            <div id="ai-container" style="margin-bottom: 2rem; display: block;">
-                <button id="ai-btn" class="btn btn-special" data-word="{{ card.english_word if card else '' }}" style="border-radius: 20px; font-size: 0.9rem;" onclick="makeAiSentence(this.dataset.word)">✨ AI 造句</button>
-                <div id="ai-result" class="markdown-body" style="margin-top: 10px; padding: 10px; background: var(--success-bg); border-radius: 10px; color: var(--success-color); text-align: left; display: none;"></div>
-            </div>
-
             <p style="margin-bottom: 1rem; color: #888;">你對這個單字的印象如何？</p>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
                 <button onclick="submitAnswer(0)" class="btn btn-red">忘記</button>
@@ -58,41 +53,6 @@
     </div>
 
     <script>
-        async function makeAiSentence(word) {
-            const aiBtn = document.getElementById('ai-btn');
-            const aiResult = document.getElementById('ai-result');
-
-            if (!word) return;
-
-            aiBtn.disabled = true;
-            aiBtn.innerText = '生成中...';
-            aiResult.style.display = 'block';
-            aiResult.innerText = '正在詢問 AI...';
-
-            try {
-                const res = await fetch('/api/make_sentence', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({ word: word })
-                });
-                const data = await res.json();
-                if (data.sentence) {
-                    aiResult.innerHTML = DOMPurify.sanitize(marked.parse(data.sentence));
-                } else {
-                    aiResult.innerText = '生成失敗';
-                }
-            } catch (err) {
-                aiResult.innerText = '連線錯誤';
-                console.error(err);
-            } finally {
-                aiBtn.disabled = false;
-                aiBtn.innerText = '✨ AI 造句';
-            }
-        }
-
         async function submitAnswer(quality) {
             const container = document.getElementById('study-card-container');
             const cardId = container.dataset.cardId;
@@ -154,17 +114,6 @@
 
             document.getElementById('card-front-text').innerText = data.card.front;
             document.getElementById('card-back-text').innerText = data.card.back;
-
-            // Update AI button
-            const aiBtn = document.getElementById('ai-btn');
-            if (data.card.english_word) {
-                aiBtn.dataset.word = data.card.english_word;
-            }
-
-            // Reset AI result
-            const aiResult = document.getElementById('ai-result');
-            aiResult.style.display = 'none';
-            aiResult.innerText = '';
 
             // Reset View (Hide answer, show front)
             document.getElementById('ans').style.display = 'none';

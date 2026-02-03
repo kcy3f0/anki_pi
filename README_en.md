@@ -1,6 +1,6 @@
 # anki_pi
 
-This is a lightweight Anki-like web application based on Flask and the SM-2 algorithm, designed to run on a Raspberry Pi or other low-power devices. It combines traditional flashcard learning, AI-powered quizzing, and Discord integration to make the learning process more efficient and fun.
+This is a lightweight Anki-like web application based on Flask and the SM-2 algorithm, designed to run on a Raspberry Pi or other low-power devices. It combines traditional flashcard learning and Discord integration to make the learning process more efficient.
 
 ## ✨ Main Features
 
@@ -8,10 +8,8 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 - **🔊 Text-to-Speech (TTS):** Supports TTS, allowing you to click the speaker icon to hear the pronunciation of words or sentences (uses Microsoft Edge TTS or Google TTS).
 - **📚 Learning Modes:**
     - **Traditional Mode:** Standard flashcard learning supporting "Recognize Only" and "Need to Spell" card types.
-    - **AI Assistance:** During study, you can invoke AI (integrated with [Ollama](https://ollama.ai/)) to generate practical sentences for the current word or take random AI quizzes.
 - **🛠️ Database Optimization (Merge Duplicates):**
-    - Automatically merge duplicate cards.
-    - Uses AI to intelligently combine card definitions while preserving the average of your learning progress.
+    - Supports automatic merging of duplicate cards during import (appends new content to existing content).
 - **📂 Convenient Card Management:**
     - Manually add new flashcards.
     - Batch import cards via copy-paste CSV content.
@@ -30,7 +28,6 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 - **Backend:** Python, Flask
 - **Frontend:** Native HTML/CSS/JavaScript
 - **Database:** SQLite
-- **AI Integration:** Ollama (supports models like Gemma, Llama3, Mistral)
 - **Audio:** edge-tts, gTTS
 - **Notifications:** Discord Webhook
 
@@ -47,7 +44,6 @@ We provide automated scripts for easy deployment on Raspberry Pi, Linux, or Wind
 **Prerequisites:**
 - Raspberry Pi OS or other Debian/Ubuntu-based Linux systems
 - Python 3.x
-- An Ollama server installed (can be on a different machine than this application)
 
 **Installation Steps:**
 
@@ -65,7 +61,6 @@ We provide automated scripts for easy deployment on Raspberry Pi, Linux, or Wind
 
     During installation, the script will prompt you for:
     - `SECRET_KEY`: Press Enter to automatically generate a random key.
-    - `OLLAMA_API_URL`: Enter your Ollama server URL (default is `http://127.0.0.1:11434/api/generate`).
     - `DISCORD_WEBHOOK_URL`: (Optional) Enter your Discord Webhook URL to enable notifications.
 
 3.  **Done!**
@@ -183,8 +178,7 @@ If you prefer not to use the automated script:
     1.  The front (or back, depending on card type and randomness) is displayed.
     2.  Click 🔊 to hear the pronunciation.
     3.  Think of the answer, then click "Show Answer".
-    4.  **AI Assistance:** On the answer page, click "✨ AI Sentence" to have AI generate an example sentence to help with memorization.
-    5.  **Rate:** Choose "Forgot", "Difficult", "Normal", or "Easy" based on your recall. The system will schedule the next review accordingly.
+    4.  **Rate:** Choose "Forgot", "Difficult", "Normal", or "Easy" based on your recall. The system will schedule the next review accordingly.
 
 ### Daily Reminders
 

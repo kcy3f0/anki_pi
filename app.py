@@ -15,7 +15,7 @@ from collections import defaultdict
 from gtts import gTTS
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
 from datetime import datetime, timedelta
-from config import DB_NAME, MODEL_NAME, OLLAMA_API_URL, SECRET_KEY
+from config import DB_NAME, SECRET_KEY
 from flask_wtf.csrf import CSRFProtect
 from backup_manager import backup_database
 
@@ -293,58 +293,10 @@ def sm2_algorithm(quality, interval, repetition, ef):
         
     return interval, repetition, ef
 
-# --- Ollama 呼叫函式 ---
-def ask_ollama(prompt):
-    try:
-        data = {
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False
-        }
-        # 設定 timeout 避免樹莓派空等
-        response = requests.post(OLLAMA_API_URL, json=data, timeout=30)
-        
-        if response.status_code == 200:
-            return response.json().get("response", "AI 沒有回應內容")
-        else:
-            return f"錯誤: 無法連線到 Ollama (Status {response.status_code})"
-    except Exception as e:
-        return f"連線錯誤: {str(e)}"
-
 # --- Merge Helpers ---
 
-def ask_ollama_merge(word, content_list):
-    """
-    Uses AI to merge multiple descriptions of a word.
-    """
-    if not content_list:
-        return ""
-
-    unique_contents = list(set([c.strip() for c in content_list if c.strip()]))
-    if len(unique_contents) <= 1:
-        return unique_contents[0] if unique_contents else ""
-
-    # Prompt construction
-    contents_text = ""
-    for i, content in enumerate(unique_contents, 1):
-        contents_text += f"內容 {i}:\n{content}\n\n"
-
-    prompt = f"""
-    請將以下關於單字 '{word}' 的 {len(unique_contents)} 段描述合併成一段完整且通順的內容。
-
-    {contents_text}
-
-    合併原則：
-    1. 保留所有獨特且重要的資訊。
-    2. 刪除重複的語句。
-    3. 如果包含 HTML 標籤（如 <ul>, <li>, <br>），請保留適當的格式以維持可讀性。
-    4. 若內容差異過大（例如完全不同的意思），請條列式呈現。
-    5. 只回傳合併後的文字，不要有任何額外的說明或開場白。
-    """
-
-    return ask_ollama(prompt)
-
 def calculate_average_stats(cards):
+
     """
     Calculates average interval, repetition, ef, and next_review date.
     cards: list of dicts or rows
@@ -883,36 +835,6 @@ def answer(card_id, quality):
     else:
         return redirect(url_for('index'))
 
-# --- AI 出題功能 ---
-@app.route('/ai_quiz', methods=['GET'])
-def ai_quiz():
-    # 使用 Prompt 讓 Ollama 出題
-    prompt = "請擔任英文老師。隨機出一個適合中級程度的英文單字題目，包含一個例句（將目標單字挖空）。請用繁體中文與英文出題，不要直接給我答案。"
-    question = ask_ollama(prompt)
-    return render_template('ai_quiz.html', question=question)
-
-@app.route('/ai_check', methods=['POST'])
-def ai_check():
-    # 讓 Ollama 批改
-    question = request.form['question']
-    user_answer = request.form['user_answer']
-    
-    prompt = f"""
-    題目是：
-    {question}
-    
-    學生的回答是：
-    {user_answer}
-    
-    請判斷學生的回答是否正確（或接近正確）。
-    1. 給出評分 (0-100分)
-    2. 公布正確單字與解析
-    3. 給予繁體中文的評語和建議
-    """
-    
-    feedback = ask_ollama(prompt)
-    return render_template('ai_result.html', question=question, answer=user_answer, feedback=feedback)
-
 # TTS Lock to prevent concurrency issues if multiple requests come in
 tts_lock = threading.Lock()
 
@@ -1030,105 +952,7 @@ def api_tts():
         return f"TTS Error: {str(e)}", 500
 
 
-@app.route('/api/make_sentence', methods=['POST'])
-def api_make_sentence():
-    word = request.json.get('word')
-    if not word:
-        return jsonify({'error': 'No word provided'}), 400
-    
-    # Security: Limit word length
-    if len(word) > 100:
-        return jsonify({'error': 'Word too long (max 100 characters)'}), 400
-
-    prompt = f"請用 '{word}' 這個單字造一個生活化的英文句子，並附上繁體中文翻譯。"
-    sentence = ask_ollama(prompt)
-    
-    return jsonify({'sentence': sentence})
-
 # --- 工具：匯入 & 重置 ---
-
-@app.route('/api/run_merge_scan', methods=['POST'])
-def run_merge_scan():
-    """
-    Scans the entire database for duplicates, averages stats, merges content using AI,
-    and consolidates links to a single master card.
-    """
-    # Create a backup before starting the potentially destructive merge process
-    print("Initiating backup before merge scan...")
-    backup_success = backup_database(reason="merge_scan")
-    if not backup_success:
-        print("Backup failed, but proceeding with merge scan (check logs).")
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-
-        # 1. Find duplicates by 'front'
-        cursor.execute("""
-            SELECT front, COUNT(*) as cnt
-            FROM cards
-            GROUP BY front
-            HAVING cnt > 1
-        """)
-        duplicates = cursor.fetchall()
-
-        merged_count = 0
-
-        for row in duplicates:
-            front = row['front']
-
-            # Fetch all instances for this word
-            cursor.execute("SELECT * FROM cards WHERE front = ?", (front,))
-            cards = cursor.fetchall()
-
-            if not cards:
-                continue
-
-            # Prepare data for merge
-            # We treat the first card as the "Master" which will survive
-            master_card = cards[0]
-            master_id = master_card['id']
-            other_cards = cards[1:]
-
-            # Check if ANY card is 'spell', if so, upgrade master to 'spell'
-            # (Spell is harder/more strict than recognize, so it takes precedence)
-            any_spell = any(c['card_type'] == 'spell' for c in cards)
-            final_card_type = 'spell' if any_spell else master_card['card_type']
-
-            # Calculate Average Stats (for ALL cards including master)
-            avg_int, avg_rep, avg_ef, avg_review = calculate_average_stats(cards)
-
-            # Merge content (Back)
-            all_backs = [c['back'] for c in cards]
-            merged_back = ask_ollama_merge(front, all_backs)
-
-            # Update Master Card
-            cursor.execute("""
-                UPDATE cards
-                SET back = ?, interval = ?, repetition = ?, ef = ?, next_review = ?, card_type = ?
-                WHERE id = ?
-            """, (merged_back, avg_int, avg_rep, avg_ef, avg_review, final_card_type, master_id))
-
-            # Move Links and Delete others
-            for other in other_cards:
-                other_id = other['id']
-
-                # Fetch all decks the 'other' card belongs to
-                cursor.execute("SELECT deck_id FROM card_decks WHERE card_id = ?", (other_id,))
-                deck_ids = [r['deck_id'] for r in cursor.fetchall()]
-
-                # Link master to these decks (ignore duplicates if master already there)
-                for deck_id in deck_ids:
-                    cursor.execute("INSERT OR IGNORE INTO card_decks (card_id, deck_id) VALUES (?, ?)", (master_id, deck_id))
-
-                # Delete 'other' card
-                # Note: ON DELETE CASCADE in card_decks will clean up the old links automatically
-                cursor.execute("DELETE FROM cards WHERE id = ?", (other_id,))
-
-            merged_count += 1
-            # Commit after each word merge to save progress (optional, but safer for long process)
-            conn.commit()
-
-        return jsonify({'status': 'success', 'merged_count': merged_count})
 
 @app.route('/import/paste', methods=['GET', 'POST'])
 def import_paste():
@@ -1181,7 +1005,9 @@ def import_paste():
                             # Merge back content if different
                             merged_back = current_back
                             if current_back.strip() != back.strip():
-                                merged_back = ask_ollama_merge(front, [current_back, back])
+                                # Simple concatenation: Append new content if it's not already in the existing content
+                                if back.strip() not in current_back:
+                                    merged_back = f"{current_back}\n\n{back.strip()}"
 
                             # Update back and type
                             cursor.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, card_id))

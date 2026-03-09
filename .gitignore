@@ -150,4 +150,8 @@ i m p o r t e d _ f i l e s /
 
 # TTS Audio Files
 *.mp3
+*.wav
 static/tts/
+
+# Piper TTS Models
+models/

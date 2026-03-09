@@ -5,14 +5,12 @@ import json
 import os
 import csv
 import io
-import asyncio
-import edge_tts
+import wave
 import threading
 import uuid
-import os
 import hashlib
 from collections import defaultdict
-from gtts import gTTS
+from piper import PiperVoice
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
 from datetime import datetime, timedelta
 from config import DB_NAME, SECRET_KEY
@@ -26,6 +24,17 @@ csrf = CSRFProtect(app)
 
 TTS_DIR = os.path.join(app.static_folder, 'tts')
 os.makedirs(TTS_DIR, exist_ok=True)
+
+# --- Piper TTS Voice 初始化 ---
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+MODEL_PATH = os.path.join(MODEL_DIR, 'en_US-lessac-medium.onnx')
+piper_voice = None
+if os.path.exists(MODEL_PATH):
+    piper_voice = PiperVoice.load(MODEL_PATH)
+    print(f"Piper TTS voice loaded: {MODEL_PATH}")
+else:
+    print(f"WARNING: Piper model not found at {MODEL_PATH}. TTS will be unavailable.")
+    print(f"Please run: python -m piper.download_voices en_US-lessac-medium --data-dir {MODEL_DIR}")
 
 # --- 資料庫初始化 ---
 def get_db_connection():
@@ -841,16 +850,24 @@ tts_lock = threading.Lock()
 def get_tts_filename(text):
     """Generate a consistent filename based on MD5 hash of the text."""
     hash_object = hashlib.md5(text.encode())
+    return f"{hash_object.hexdigest()}.wav"
+
+def get_legacy_tts_filename(text):
+    """Generate legacy MP3 filename for backwards compatibility with old cache."""
+    hash_object = hashlib.md5(text.encode())
     return f"{hash_object.hexdigest()}.mp3"
 
-async def generate_tts_file(text, filepath):
-    """Generates TTS audio file using edge-tts (async)."""
+def generate_tts_file(text, filepath):
+    """Generates TTS audio file using Piper TTS."""
+    if piper_voice is None:
+        print(f"Piper voice not loaded, cannot generate TTS for '{text}'")
+        return False
     try:
-        communicate = edge_tts.Communicate(text, "en-US-AriaNeural")
-        await communicate.save(filepath)
+        with wave.open(filepath, 'wb') as wav_file:
+            piper_voice.synthesize_wav(text, wav_file)
         return True
     except Exception as e:
-        print(f"Edge TTS generation failed for '{text}': {e}")
+        print(f"Piper TTS generation failed for '{text}': {e}")
         return False
 
 def process_tts_list(texts):
@@ -862,19 +879,13 @@ def process_tts_list(texts):
         filename = get_tts_filename(text)
         filepath = os.path.join(TTS_DIR, filename)
 
-        if not os.path.exists(filepath):
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                success = loop.run_until_complete(generate_tts_file(text, filepath))
-                loop.close()
+        # Also check legacy .mp3 file — if it exists, skip generation
+        legacy_filename = get_legacy_tts_filename(text)
+        legacy_filepath = os.path.join(TTS_DIR, legacy_filename)
 
-                if not success:
-                    try:
-                        tts = gTTS(text=text, lang='en')
-                        tts.save(filepath)
-                    except Exception as gtts_e:
-                        print(f"gTTS fallback failed for '{text}': {gtts_e}")
+        if not os.path.exists(filepath) and not os.path.exists(legacy_filepath):
+            try:
+                generate_tts_file(text, filepath)
             except Exception as e:
                 print(f"Error generating TTS for '{text}': {e}")
 
@@ -927,25 +938,25 @@ def api_tts():
     if len(text) > 500:
         return "Text too long (max 500 characters)", 400
 
+    # 1. Check for legacy .mp3 cache first (backwards compatibility)
+    legacy_filename = get_legacy_tts_filename(text)
+    legacy_filepath = os.path.join(TTS_DIR, legacy_filename)
+    if os.path.exists(legacy_filepath):
+        return send_from_directory(TTS_DIR, legacy_filename)
+
+    # 2. Check for new .wav cache
     filename = get_tts_filename(text)
     filepath = os.path.join(TTS_DIR, filename)
-
-    # 1. Check if file exists (Hit)
     if os.path.exists(filepath):
         return send_from_directory(TTS_DIR, filename)
 
-    # 2. If not exists (Miss) -> Generate immediately
+    # 3. Generate with Piper TTS
     try:
-        asyncio.run(generate_tts_file(text, filepath))
+        success = generate_tts_file(text, filepath)
+        if success and os.path.exists(filepath):
+            return send_from_directory(TTS_DIR, filename)
 
-        if os.path.exists(filepath):
-             return send_from_directory(TTS_DIR, filename)
-
-        # Fallback to gTTS if Edge TTS produced no file
-        print("Edge TTS failed to produce file, trying gTTS...")
-        tts = gTTS(text=text, lang='en')
-        tts.save(filepath)
-        return send_from_directory(TTS_DIR, filename)
+        return "TTS generation failed", 500
 
     except Exception as e:
         print(f"TTS Generation Error: {e}")

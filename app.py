@@ -353,14 +353,20 @@ def calculate_average_stats(cards):
     return avg_interval, avg_rep, avg_ef, next_review
 
 # --- Helper: Fetch Next Card ---
-def fetch_next_card_data(deck_ids):
+def fetch_next_card_data(deck_ids, conn=None):
     """
     Helper to fetch the next card for a given list of deck_ids.
     Returns (card_dict, due_count).
     card_dict includes processed 'front', 'back', 'english_word', and 'id'.
     """
     today = datetime.now().date()
-    with get_db_connection() as conn:
+
+    close_conn = False
+    if conn is None:
+        conn = get_db_connection()
+        close_conn = True
+
+    try:
         cursor = conn.cursor()
 
         if not deck_ids:
@@ -369,24 +375,31 @@ def fetch_next_card_data(deck_ids):
         placeholders = ','.join('?' for _ in deck_ids)
         params = [today] + deck_ids
 
-        # Get count (Join card_decks)
+        # Get all due card IDs to avoid slow ORDER BY RANDOM() on potentially large joined sets
         cursor.execute(f"""
-            SELECT COUNT(DISTINCT c.id)
+            SELECT DISTINCT c.id
             FROM cards c
             JOIN card_decks cd ON c.id = cd.card_id
             WHERE c.next_review <= ? AND cd.deck_id IN ({placeholders})
         """, params)
-        due_count = cursor.fetchone()[0]
 
-        # Get random card (Join card_decks)
-        cursor.execute(f"""
-            SELECT c.*
-            FROM cards c
-            JOIN card_decks cd ON c.id = cd.card_id
-            WHERE c.next_review <= ? AND cd.deck_id IN ({placeholders})
-            ORDER BY RANDOM() LIMIT 1
-        """, params)
-        card = cursor.fetchone()
+        due_card_rows = cursor.fetchall()
+        due_count = len(due_card_rows)
+
+        if due_count > 0:
+            # Pick a random card ID from the Python list
+            random_card_row = random.choice(due_card_rows)
+            random_card_id = random_card_row['id']
+
+            # Fetch the actual card data
+            cursor.execute("SELECT * FROM cards WHERE id = ?", (random_card_id,))
+            card = cursor.fetchone()
+        else:
+            card = None
+
+    finally:
+        if close_conn:
+            conn.close()
 
     if card:
         card_data = dict(card)
@@ -811,9 +824,10 @@ def api_study_answer():
     if card_id is None or quality is None:
         return jsonify({'error': 'Missing parameters'}), 400
         
-    # 1. Update SM-2
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # 1. Update SM-2
         cursor.execute("SELECT interval, repetition, ef FROM cards WHERE id = ?", (card_id,))
         card_row = cursor.fetchone()
         
@@ -826,18 +840,16 @@ def api_study_answer():
                            (new_interval, new_rep, new_ef, new_date, card_id))
             conn.commit()
 
-    # 2. Determine Deck IDs for next card
-    target_deck_ids = []
-    if deck_id:
-        target_deck_ids = [int(deck_id)]
-    elif folder_id:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
+        # 2. Determine Deck IDs for next card
+        target_deck_ids = []
+        if deck_id:
+            target_deck_ids = [int(deck_id)]
+        elif folder_id:
             cursor.execute("SELECT deck_id FROM deck_folders WHERE folder_id = ?", (folder_id,))
             target_deck_ids = [row['deck_id'] for row in cursor.fetchall()]
 
-    # 3. Fetch Next Card
-    next_card, due_count = fetch_next_card_data(target_deck_ids)
+        # 3. Fetch Next Card using the same connection
+        next_card, due_count = fetch_next_card_data(target_deck_ids, conn=conn)
 
     return jsonify({
         'status': 'success',

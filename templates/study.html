@@ -61,6 +61,10 @@
 
             if (!cardId) return;
 
+            // 增加視覺回饋：降低透明度並禁用點擊
+            container.style.opacity = '0.5';
+            container.style.pointerEvents = 'none';
+
             try {
                 const res = await fetch('/api/study/answer', {
                     method: 'POST',
@@ -88,6 +92,10 @@
             } catch (err) {
                 console.error("Submit error:", err);
                 alert("提交失敗，請檢查網路連線。");
+            } finally {
+                // 恢復卡片容器的透明度與點擊狀態
+                container.style.opacity = '1';
+                container.style.pointerEvents = 'auto';
             }
         }
 

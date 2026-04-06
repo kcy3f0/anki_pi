@@ -5,9 +5,8 @@
 ## ✨ 主要功能
 
 - **🧠 間隔重複 (Spaced Repetition):** 內建 [SM-2 演算法](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm)，根據你的記憶曲線自動安排複習時間。
-- **🔊 語音朗讀 (TTS):**
-    - 支援 Text-to-Speech，可點擊喇叭圖示聆聽單字或句子發音（使用 Microsoft Edge TTS 或 Google TTS）。
-    - **背景生成:** 系統會在新增卡片、匯入或啟動時自動於背景掃描並生成缺少的語音檔，確保學習時的流暢體驗。
+- **📖 字典查詢:**
+    - 支援外部字典查詢，可點擊字典圖示前往 Collins 字典。
 - **🛠️ 資料庫優化 (Merge Duplicates):**
     - 支援匯入時自動合併重複的單字卡片（將新內容串接於舊內容之後）。
 - **📚 學習模式:**
@@ -29,7 +28,6 @@
 - **後端:** Python, Flask
 - **前端:** 原生 HTML/CSS/JavaScript (無須編譯)
 - **資料庫:** SQLite
-- **語音:** edge-tts, gTTS
 - **環境管理:** dotenv (`config.py` 統一管理)
 
 ---

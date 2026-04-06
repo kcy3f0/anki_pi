@@ -25,7 +25,7 @@
                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                             <span>{{ card.front }}</span>
                             <div style="display: flex; gap: 4px;">
-                                <button onclick="speakText('{{ card.front | replace("'", "\\'") }}')" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 50%;" title="發音">🔊</button>
+                                <a href="https://www.collinsdictionary.com/dictionary/english/{{ card.front | urlencode }}" target="_blank" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 50%; text-decoration: none;" title="字典">📖</a>
                             </div>
                         </div>
                     </td>

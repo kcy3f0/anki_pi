@@ -762,8 +762,6 @@ def add_card():
 
             conn.commit()
 
-            # Trigger background TTS generation for the new card
-
             flash(f"成功新增卡片: {front}", "success")
             return redirect(url_for('add_card'))
 
@@ -856,7 +854,8 @@ def answer(card_id, quality):
     else:
         return redirect(url_for('index'))
 
-# TTS Lock to prevent concurrency issues if multiple requests come in
+@app.route('/merge_duplicates', methods=['POST'])
+def merge_duplicates():
     merged_count = 0
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -1021,8 +1020,6 @@ def import_paste():
                         count += 1
                 
                 conn.commit()
-
-                # Trigger background TTS generation for imported cards
 
                 flash(f"✅ 成功處理 {count} 張卡片！(含合併與新增)", "success")
                 return redirect(url_for('index'))

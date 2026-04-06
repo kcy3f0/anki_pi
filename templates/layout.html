@@ -397,17 +397,6 @@
             });
         })();
 
-        // Speech synthesis
-        function speakText(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const u = new SpeechSynthesisUtterance(text);
-                u.lang = 'en-US'; 
-                window.speechSynthesis.speak(u);
-            } else {
-                console.error("Browser does not support Speech Synthesis API.");
-            }
-        }
     </script>
 </body>
 </html>

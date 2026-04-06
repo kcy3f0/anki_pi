@@ -5,7 +5,7 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 ## ✨ Main Features
 
 - **🧠 Spaced Repetition:** Built-in [SM-2 algorithm](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm) automatically schedules review times based on your memory curve.
-- **🔊 Text-to-Speech (TTS):** Supports TTS, allowing you to click the speaker icon to hear the pronunciation of words or sentences (uses Microsoft Edge TTS or Google TTS).
+- **📖 Dictionary Link:** Supports external dictionary lookup, allowing you to click the dictionary icon to view the Collins Dictionary definition.
 - **📚 Learning Modes:**
     - **Traditional Mode:** Standard flashcard learning supporting "Recognize Only" and "Need to Spell" card types.
 - **🛠️ Database Optimization (Merge Duplicates):**
@@ -28,7 +28,6 @@ This is a lightweight Anki-like web application based on Flask and the SM-2 algo
 - **Backend:** Python, Flask
 - **Frontend:** Native HTML/CSS/JavaScript
 - **Database:** SQLite
-- **Audio:** edge-tts, gTTS
 - **Notifications:** Discord Webhook
 
 ---

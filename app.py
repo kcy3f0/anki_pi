@@ -913,13 +913,11 @@ def merge_duplicates():
                 dup_ids = [d['id'] for d in duplicates]
                 if dup_ids:
                     placeholders = ','.join('?' for _ in dup_ids)
-                    cursor.execute(f"SELECT deck_id FROM card_decks WHERE card_id IN ({placeholders})", dup_ids)
-                    deck_rows = cursor.fetchall()
-
-                    for row in deck_rows:
-                        deck_id = row['deck_id']
-                        # Insert link for master card (ignore if already exists)
-                        cursor.execute("INSERT OR IGNORE INTO card_decks (card_id, deck_id) VALUES (?, ?)", (master_card['id'], deck_id))
+                    # Insert link for master card (ignore if already exists)
+                    cursor.execute(f"""
+                        INSERT OR IGNORE INTO card_decks (card_id, deck_id)
+                        SELECT ?, deck_id FROM card_decks WHERE card_id IN ({placeholders})
+                    """, [master_card['id']] + dup_ids)
 
                     # Delete duplicates (CASCADE will handle card_decks)
                     cursor.execute(f"DELETE FROM cards WHERE id IN ({placeholders})", dup_ids)

@@ -23,7 +23,7 @@
             
             <div style="margin-bottom: 2rem;">
                 <p id="card-back-text" style="font-size: 1.8rem; color: var(--primary-color); font-weight: 500; margin: 0;">{{ card.back if card else '' }}</p>
-                <a id="dict-link" href="https://www.collinsdictionary.com/dictionary/english/{{ (card.english_word if card and card.english_word else card.front) | urlencode if card else '' }}" target="_blank" class="btn btn-gray" style="border-radius: 50%; width: 45px; height: 45px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-top: 0.5rem; text-decoration: none;">
+                <a id="dict-link" href="https://dictionary.cambridge.org/zht/%E8%A9%9E%E5%85%B8/%E8%8B%B1%E8%AA%9E-%E6%BC%A2%E8%AA%9E-%E7%B9%81%E9%AB%94/{{ (card.english_word if card and card.english_word else card.front) | urlencode if card else '' }}" target="_blank" class="btn btn-gray" style="border-radius: 50%; width: 45px; height: 45px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-top: 0.5rem; text-decoration: none;">
                     📖
                 </a>
             </div>
@@ -121,7 +121,7 @@
             document.getElementById('card-back-text').innerText = data.card.back;
             // Provide fallback to front if english_word is missing
             const word = data.card.english_word || data.card.front;
-            document.getElementById('dict-link').href = `https://www.collinsdictionary.com/dictionary/english/${encodeURIComponent(word)}`;
+            document.getElementById('dict-link').href = `https://dictionary.cambridge.org/zht/%E8%A9%9E%E5%85%B8/%E8%8B%B1%E8%AA%9E-%E6%BC%A2%E8%AA%9E-%E7%B9%81%E9%AB%94/${encodeURIComponent(word)}`;
 
             // Reset View (Hide answer, show front)
             document.getElementById('ans').style.display = 'none';

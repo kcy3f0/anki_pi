@@ -822,30 +822,6 @@ def api_study_answer():
         'due_count': due_count
     })
 
-@app.route('/answer/<int:card_id>/<int:quality>')
-def answer(card_id, quality):
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT interval, repetition, ef FROM cards WHERE id = ?", (card_id,))
-        data = cursor.fetchone()
-        
-        if data:
-            old_interval, old_rep, old_ef = data
-            new_interval, new_rep, new_ef = sm2_algorithm(quality, old_interval, old_rep, old_ef)
-            new_date = datetime.now().date() + timedelta(days=new_interval)
-            
-            cursor.execute("UPDATE cards SET interval = ?, repetition = ?, ef = ?, next_review = ? WHERE id = ?", 
-                           (new_interval, new_rep, new_ef, new_date, card_id))
-            conn.commit()
-
-    # Redirect back to the correct study page (deck or folder)
-    if 'deck_id' in request.args:
-        return redirect(url_for('study', deck_id=request.args.get('deck_id')))
-    elif 'folder_id' in request.args:
-        return redirect(url_for('study_folder', folder_id=request.args.get('folder_id')))
-    else:
-        return redirect(url_for('index'))
-
 @app.route('/merge_duplicates', methods=['POST'])
 def merge_duplicates():
     merged_count = 0

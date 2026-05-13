@@ -1,78 +1,70 @@
-import sys
-from unittest.mock import MagicMock, patch
-from datetime import datetime, date, timedelta
 import pytest
+import datetime
+from unittest.mock import patch
 
-# Mock dependencies before importing app
-mock_modules = [
-    'flask',
-    'flask_wtf',
-    'flask_wtf.csrf',
-    'requests',
-    'config',
-    'backup_manager'
-]
-for module in mock_modules:
-    sys.modules[module] = MagicMock()
+# Mock sys.modules before importing app
+import sys
+from unittest.mock import MagicMock
+sys.modules['flask'] = MagicMock()
+sys.modules['flask_wtf.csrf'] = MagicMock()
 
-# Now we can import calculate_average_stats from app
 from app import calculate_average_stats
 
 @pytest.fixture
 def fixed_now():
-    return datetime(2023, 1, 1, 12, 0, 0)
+    from datetime import timezone
+    return datetime.datetime(2023, 1, 1, 12, 0, tzinfo=timezone.utc)
 
 def test_calculate_average_stats_empty(fixed_now):
     with patch('app.datetime') as mock_datetime:
         mock_datetime.now.return_value = fixed_now
-        avg_interval, avg_rep, avg_ef, next_review = calculate_average_stats([])
-
-        assert avg_interval == 0
-        assert avg_rep == 0
-        assert avg_ef == 2.5
-        assert next_review == fixed_now.date()
+        state, step, avg_stability, avg_difficulty, last_review, reps, lapses, next_review = calculate_average_stats([])
+        assert state == 1
+        assert step == 0
+        assert avg_stability is None
+        assert avg_difficulty is None
+        assert next_review == fixed_now.isoformat()
 
 def test_calculate_average_stats_single_card(fixed_now):
     with patch('app.datetime') as mock_datetime:
         mock_datetime.now.return_value = fixed_now
         cards = [
-            {'interval': 10, 'repetition': 5, 'ef': 2.8}
+            {'stability': 10.0, 'difficulty': 5.0}
         ]
-        avg_interval, avg_rep, avg_ef, next_review = calculate_average_stats(cards)
-
-        assert avg_interval == 10
-        assert avg_rep == 5
-        assert avg_ef == 2.8
-        assert next_review == fixed_now.date() + timedelta(days=10)
+        state, step, avg_stability, avg_difficulty, last_review, reps, lapses, next_review = calculate_average_stats(cards)
+        assert state == 2
+        assert step is None
+        assert avg_stability == 10.0
+        assert avg_difficulty == 5.0
+        expected_date = (fixed_now + datetime.timedelta(days=10)).isoformat()
+        assert next_review == expected_date
 
 def test_calculate_average_stats_multiple_cards(fixed_now):
     with patch('app.datetime') as mock_datetime:
         mock_datetime.now.return_value = fixed_now
         cards = [
-            {'interval': 10, 'repetition': 2, 'ef': 2.0},
-            {'interval': 20, 'repetition': 4, 'ef': 3.0}
+            {'stability': 10.0, 'difficulty': 2.0},
+            {'stability': 20.0, 'difficulty': 4.0}
         ]
-        # total_interval = 30, count = 2 -> avg = 15
-        # total_rep = 6, count = 2 -> avg = 3
-        # total_ef = 5.0, count = 2 -> avg = 2.5
 
-        avg_interval, avg_rep, avg_ef, next_review = calculate_average_stats(cards)
+        state, step, avg_stability, avg_difficulty, last_review, reps, lapses, next_review = calculate_average_stats(cards)
+        assert state == 2
+        assert step is None
+        assert avg_stability == 15.0
+        assert avg_difficulty == 3.0
+        expected_date = (fixed_now + datetime.timedelta(days=15)).isoformat()
+        assert next_review == expected_date
 
-        assert avg_interval == 15
-        assert avg_rep == 3
-        assert avg_ef == 2.5
-        assert next_review == fixed_now.date() + timedelta(days=15)
-
-def test_calculate_average_stats_rounding(fixed_now):
+def test_calculate_average_stats_none(fixed_now):
     with patch('app.datetime') as mock_datetime:
         mock_datetime.now.return_value = fixed_now
         cards = [
-            {'interval': 10, 'repetition': 1, 'ef': 2.5},
-            {'interval': 11, 'repetition': 2, 'ef': 2.5}
+            {'stability': None, 'difficulty': None},
+            {'stability': None, 'difficulty': None}
         ]
-        # total_interval = 21, count = 2 -> avg = 10.5 -> int(10.5) = 10
 
-        avg_interval, avg_rep, avg_ef, next_review = calculate_average_stats(cards)
-
-        assert avg_interval == 10
-        assert next_review == fixed_now.date() + timedelta(days=10)
+        state, step, avg_stability, avg_difficulty, last_review, reps, lapses, next_review = calculate_average_stats(cards)
+        assert state == 1
+        assert step == 0
+        assert avg_stability is None
+        assert avg_difficulty is None

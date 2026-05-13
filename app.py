@@ -501,7 +501,7 @@ def index():
             LEFT JOIN cards c ON cd.card_id = c.id AND c.next_review <= ?
             GROUP BY df.folder_id, d.id, d.name
             ORDER BY d.name
-        """, (today,))
+        """, (now_utc.isoformat(),))
 
         all_decks = cursor.fetchall()
 
@@ -1130,7 +1130,7 @@ def reset_progress():
         cursor.execute("""
             UPDATE cards 
             SET state = 1, step = 0, stability = NULL, difficulty = NULL, last_review = NULL, reps = 0, lapses = 0, next_review = ?
-        """, (today,))
+        """, (now_utc.isoformat(),))
         conn.commit()
     flash("已重置所有卡片進度。", "success")
     return redirect(url_for('index'))

@@ -4,7 +4,8 @@ import csv
 import io
 from collections import defaultdict
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from fsrs import Scheduler, Card, Rating, State
 from config import DB_NAME, SECRET_KEY
 from flask_wtf.csrf import CSRFProtect
 
@@ -228,7 +229,81 @@ def init_db():
 
                 print("Cards table migrated and merged successfully.")
 
-        # Ensure settings table exists for global app configurations
+
+        # --- Schema and Migration to FSRS ---
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cards'")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(cards)")
+            card_columns = [column[1] for column in cursor.fetchall()]
+
+            if 'ef' in card_columns:
+                print("Migrating cards from SM-2 to FSRS schema...")
+
+                # IMPORTANT: Disable Foreign Keys during migration to prevent CASCADE deletes
+                cursor.execute("PRAGMA foreign_keys = OFF")
+
+                # Fetch all old cards
+                cursor.execute("SELECT * FROM cards")
+                old_cards = cursor.fetchall()
+
+                # Prepare New Table
+                cursor.execute('''
+                    CREATE TABLE cards_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        front TEXT NOT NULL,
+                        back TEXT NOT NULL,
+                        next_review DATE NOT NULL,
+                        state INTEGER DEFAULT 1,
+                        step INTEGER DEFAULT 0,
+                        stability FLOAT DEFAULT NULL,
+                        difficulty FLOAT DEFAULT NULL,
+                        last_review DATE DEFAULT NULL,
+                        reps INTEGER DEFAULT 0,
+                        lapses INTEGER DEFAULT 0,
+                        card_type TEXT NOT NULL DEFAULT 'recognize'
+                    )
+                ''')
+
+                now_utc = datetime.now(timezone.utc).isoformat()
+
+                # Insert mapped data
+                for card in old_cards:
+                    interval = card['interval']
+                    repetition = card['repetition']
+                    ef = card['ef']
+
+                    state = 2 # Review
+                    step = None
+                    stability = None
+                    difficulty = None
+                    last_review = None
+
+                    reps = card['repetition']
+                    lapses = 0
+                    if repetition == 0:
+                        state = 1 # Learning
+                        step = 0
+                    else:
+                        stability = float(interval)
+                        difficulty = 10.0 - (ef - 1.3) / 1.2 * 9.0
+                        difficulty = max(1.0, min(10.0, difficulty))
+                        last_review = now_utc
+
+                    cursor.execute('''
+                        INSERT INTO cards_new (id, front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (card['id'], card['front'], card['back'], card['next_review'], state, step, stability, difficulty, last_review, reps, lapses, card['card_type']))
+
+                # Finalize Swap
+                cursor.execute("DROP TABLE cards")
+                cursor.execute("ALTER TABLE cards_new RENAME TO cards")
+
+                # Re-enable Foreign Keys
+                cursor.execute("PRAGMA foreign_keys = ON")
+
+                print("Cards table migrated to FSRS successfully.")
+
+# Ensure settings table exists for global app configurations
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -243,9 +318,13 @@ def init_db():
                 front TEXT NOT NULL,
                 back TEXT NOT NULL,
                 next_review DATE NOT NULL,
-                interval INTEGER DEFAULT 0,
-                repetition INTEGER DEFAULT 0,
-                ef FLOAT DEFAULT 2.5,
+                state INTEGER DEFAULT 1,
+                step INTEGER DEFAULT 0,
+                stability FLOAT DEFAULT NULL,
+                difficulty FLOAT DEFAULT NULL,
+                last_review DATE DEFAULT NULL,
+                reps INTEGER DEFAULT 0,
+                lapses INTEGER DEFAULT 0,
                 card_type TEXT NOT NULL DEFAULT 'recognize'
             )
         ''')
@@ -270,55 +349,53 @@ def init_db():
 
         conn.commit()
 
-# --- SM-2 記憶演算法 ---
-def sm2_algorithm(quality, interval, repetition, ef):
-    # quality: 0 (完全忘記) ~ 5 (完美記憶)
-    if quality >= 3:
-        if repetition == 0:
-            interval = 1
-        elif repetition == 1:
-            interval = 6
-        else:
-            interval = int(interval * ef)
-        
-        repetition += 1
-        # EF (Easiness Factor) 調整公式
-        ef = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-    else:
-        # 忘記了，重置進度
-        repetition = 0
-        interval = 1
-        # ef 保持不變 (有些變體會減少 ef，這裡採簡化版)
 
-    if ef < 1.3:
-        ef = 1.3
-        
-    return interval, repetition, ef
 
 # --- Merge Helpers ---
 
 def calculate_average_stats(cards):
 
     """
-    Calculates average interval, repetition, ef, and next_review date.
+    Calculates average stability and difficulty for FSRS.
     cards: list of dicts or rows
     """
     if not cards:
-        return 0, 0, 2.5, datetime.now().date()
+        return 1, 0, None, None, None, 0, 0, datetime.now(timezone.utc).isoformat()
 
-    total_interval = sum(c['interval'] for c in cards)
-    total_rep = sum(c['repetition'] for c in cards)
-    total_ef = sum(c['ef'] for c in cards)
-    count = len(cards)
+    total_stability = 0
+    total_difficulty = 0
+    total_reps = 0
+    total_lapses = 0
+    valid_count = 0
 
-    avg_interval = int(total_interval / count)
-    avg_rep = int(total_rep / count)
-    avg_ef = total_ef / count
+    for c in cards:
+        total_reps += c.get('reps', 0)
+        total_lapses += c.get('lapses', 0)
+        if c.get('stability') is not None and c.get('difficulty') is not None:
+            total_stability += c['stability']
+            total_difficulty += c['difficulty']
+            valid_count += 1
 
-    # Calculate next_review: Today + Avg Interval
-    next_review = datetime.now().date() + timedelta(days=avg_interval)
+    if valid_count > 0:
+        avg_stability = total_stability / valid_count
+        avg_difficulty = total_difficulty / valid_count
+        state = 2 # Review
+        step = None
+        # next_review based on average stability
+        next_review = (datetime.now(timezone.utc) + timedelta(days=int(avg_stability))).isoformat()
+    else:
+        avg_stability = None
+        avg_difficulty = None
+        state = 1 # Learning
+        step = 0
+        next_review = datetime.now(timezone.utc).isoformat()
 
-    return avg_interval, avg_rep, avg_ef, next_review
+    last_review = datetime.now(timezone.utc).isoformat()
+
+    avg_reps = total_reps // len(cards) if len(cards) > 0 else 0
+    avg_lapses = total_lapses // len(cards) if len(cards) > 0 else 0
+
+    return state, step, avg_stability, avg_difficulty, last_review, avg_reps, avg_lapses, next_review
 
 # --- Helper: Fetch Next Card ---
 def fetch_next_card_data(deck_ids, conn=None):
@@ -327,7 +404,7 @@ def fetch_next_card_data(deck_ids, conn=None):
     Returns (card_dict, due_count).
     card_dict includes processed 'front', 'back', 'english_word', and 'id'.
     """
-    today = datetime.now().date()
+    now_utc = datetime.now(timezone.utc)
 
     close_conn = False
     if conn is None:
@@ -341,7 +418,7 @@ def fetch_next_card_data(deck_ids, conn=None):
             return None, 0
 
         placeholders = ','.join('?' for _ in deck_ids)
-        params = [today] + deck_ids
+        params = [now_utc.isoformat()] + deck_ids
 
         # Get all due card IDs to avoid slow ORDER BY RANDOM() on potentially large joined sets
         cursor.execute(f"""
@@ -401,7 +478,7 @@ def fetch_next_card_data(deck_ids, conn=None):
 
 @app.route('/')
 def index():
-    today = datetime.now().date()
+    now_utc = datetime.now(timezone.utc)
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -736,7 +813,7 @@ def add_card():
             back = request.form['back']
             card_type = request.form['card_type']
             deck_id = request.form['deck_id']
-            today = datetime.now().date()
+            now_utc = datetime.now(timezone.utc)
             
             if not deck_id:
                 flash("請選擇一個牌組！", "error")
@@ -744,8 +821,8 @@ def add_card():
 
             # Insert card
             cursor.execute(
-                "INSERT INTO cards (front, back, next_review, interval, repetition, ef, card_type) VALUES (?, ?, ?, 0, 0, 2.5, ?)",
-                (front, back, today, card_type)
+                "INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type) VALUES (?, ?, ?, 1, 0, NULL, NULL, NULL, 0, 0, ?)",
+                (front, back, now_utc.isoformat(), card_type)
             )
             card_id = cursor.lastrowid
 
@@ -792,17 +869,55 @@ def api_study_answer():
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
-        # 1. Update SM-2
-        cursor.execute("SELECT interval, repetition, ef FROM cards WHERE id = ?", (card_id,))
+        # 1. Update FSRS
+        cursor.execute("SELECT state, step, stability, difficulty, due, last_review FROM cards WHERE id = ?", (card_id,))
+        # wait due -> next_review in our db
+        # Actually in our db, it is next_review
+        cursor.execute("SELECT state, step, stability, difficulty, next_review, last_review, reps, lapses FROM cards WHERE id = ?", (card_id,))
         card_row = cursor.fetchone()
         
         if card_row:
-            old_interval, old_rep, old_ef = card_row
-            new_interval, new_rep, new_ef = sm2_algorithm(int(quality), old_interval, old_rep, old_ef)
-            new_date = datetime.now().date() + timedelta(days=new_interval)
+            state, step, stability, difficulty, next_review, last_review, reps, lapses = card_row
+
+            # Reconstruct FSRS Card object
+            c = Card()
+            c.card_id = int(card_id)
+            c.state = State(state)
+            c.step = step
+            c.stability = stability
+            c.difficulty = difficulty
+            c.reps = reps
+            c.lapses = lapses
             
-            cursor.execute("UPDATE cards SET interval = ?, repetition = ?, ef = ?, next_review = ? WHERE id = ?",
-                           (new_interval, new_rep, new_ef, new_date, card_id))
+            # handle naive or aware datetime strings
+            try:
+                c.due = datetime.fromisoformat(str(next_review))
+                if c.due.tzinfo is None:
+                    c.due = c.due.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                c.due = datetime.now(timezone.utc)
+
+            if last_review:
+                try:
+                    c.last_review = datetime.fromisoformat(str(last_review))
+                    if c.last_review.tzinfo is None:
+                        c.last_review = c.last_review.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    c.last_review = None
+            else:
+                c.last_review = None
+
+            scheduler = Scheduler()
+            now = datetime.now(timezone.utc)
+
+            # Convert quality (1-4) to FSRS Rating
+            rating = Rating(int(quality))
+
+            # Review card
+            new_card, _ = scheduler.review_card(c, rating, now)
+
+            cursor.execute("UPDATE cards SET state = ?, step = ?, stability = ?, difficulty = ?, next_review = ?, last_review = ?, reps = ?, lapses = ? WHERE id = ?",
+                           (new_card.state.value, new_card.step, new_card.stability, new_card.difficulty, new_card.due.isoformat(), new_card.last_review.isoformat() if new_card.last_review else None, new_card.reps, new_card.lapses, card_id))
             conn.commit()
 
         # 2. Determine Deck IDs for next card
@@ -867,14 +982,16 @@ def merge_duplicates():
                 final_back = "\n\n".join(unique_backs)
 
                 # Calculate Average Stats
-                avg_interval, avg_rep, avg_ef, next_review = calculate_average_stats(group)
+
 
                 # Update Master Card
+                state, step, avg_stability, avg_difficulty, last_review, avg_reps, avg_lapses, next_review = calculate_average_stats(group)
+
                 cursor.execute("""
                     UPDATE cards
-                    SET back = ?, card_type = ?, interval = ?, repetition = ?, ef = ?, next_review = ?
+                    SET back = ?, card_type = ?, state = ?, step = ?, stability = ?, difficulty = ?, last_review = ?, reps = ?, lapses = ?, next_review = ?
                     WHERE id = ?
-                """, (final_back, final_type, avg_interval, avg_rep, avg_ef, next_review, master_card['id']))
+                """, (final_back, final_type, state, step, avg_stability, avg_difficulty, last_review, avg_reps, avg_lapses, next_review, master_card['id']))
 
                 # Re-link Decks
                 # Get all deck IDs for duplicates and link them to master
@@ -920,7 +1037,7 @@ def import_paste():
                 rows = list(csv.reader(file_like_object))
                 
                 count = 0
-                today = datetime.now().date()
+                now_utc = datetime.now(timezone.utc)
                 for row in rows:
                     if len(row) >= 2 and row[0].strip():
                         front = row[0].strip()
@@ -955,29 +1072,32 @@ def import_paste():
                             # Update back and type
                             cursor.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, card_id))
 
-                            # 3. Stats Averaging (Existing vs New(0))
+                            # 3. Stats Averaging
                             # Simulate a "new card" stat object
-                            new_card_stats = {'interval': 0, 'repetition': 0, 'ef': 2.5}
+                            new_card_stats = {'state': 1, 'step': 0, 'stability': None, 'difficulty': None, 'reps': 0, 'lapses': 0}
                             # Current stats
                             current_stats = {
-                                'interval': existing_card['interval'],
-                                'repetition': existing_card['repetition'],
-                                'ef': existing_card['ef']
+                                'state': existing_card['state'],
+                                'step': existing_card['step'],
+                                'stability': existing_card['stability'],
+                                'difficulty': existing_card['difficulty'],
+                                'reps': existing_card['reps'],
+                                'lapses': existing_card['lapses']
                             }
 
                             # Calculate average
-                            avg_int, avg_rep, avg_ef, avg_review = calculate_average_stats([current_stats, new_card_stats])
+                            state, step, avg_stability, avg_difficulty, last_review, avg_reps, avg_lapses, avg_review = calculate_average_stats([current_stats, new_card_stats])
 
                             cursor.execute("""
                                 UPDATE cards
-                                SET interval = ?, repetition = ?, ef = ?, next_review = ?
+                                SET state = ?, step = ?, stability = ?, difficulty = ?, last_review = ?, reps = ?, lapses = ?, next_review = ?
                                 WHERE id = ?
-                            """, (avg_int, avg_rep, avg_ef, avg_review, card_id))
+                            """, (state, step, avg_stability, avg_difficulty, last_review, avg_reps, avg_lapses, avg_review, card_id))
 
                         else:
                             # Card does not exist: Insert New
-                            cursor.execute("INSERT INTO cards (front, back, next_review, interval, repetition, ef, card_type) VALUES (?, ?, ?, 0, 0, 2.5, ?)",
-                                         (front, back, today, card_type))
+                            cursor.execute("INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type) VALUES (?, ?, ?, 1, 0, NULL, NULL, NULL, 0, 0, ?)",
+                                         (front, back, now_utc.isoformat(), card_type))
                             card_id = cursor.lastrowid
 
                             # Link to deck
@@ -1003,13 +1123,13 @@ def import_paste():
 
 @app.route('/reset_progress', methods=['POST'])
 def reset_progress():
-    today = datetime.now().date()
+    now_utc = datetime.now(timezone.utc)
     with get_db_connection() as conn:
         cursor = conn.cursor()
         # 將所有卡片重置為全新狀態
         cursor.execute("""
             UPDATE cards 
-            SET interval = 0, repetition = 0, ef = 2.5, next_review = ?
+            SET state = 1, step = 0, stability = NULL, difficulty = NULL, last_review = NULL, reps = 0, lapses = 0, next_review = ?
         """, (today,))
         conn.commit()
     flash("已重置所有卡片進度。", "success")

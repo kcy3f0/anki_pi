@@ -9,7 +9,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_NAME = os.path.join(BASE_DIR, DB_NAME) # 確保 DB 路徑正確
 
 def check():
-    today = datetime.now().date()
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
     if not os.path.exists(DB_NAME): return
 
     with sqlite3.connect(DB_NAME) as conn:
@@ -32,7 +33,7 @@ def check():
             ORDER BY f.name, d.name
         """
 
-        c.execute(query, (today,))
+        c.execute(query, (now_utc.isoformat(),))
         rows = c.fetchall()
 
         # Calculate Total Count (Sum of all deck counts)

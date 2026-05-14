@@ -114,6 +114,7 @@ def init_db():
                 print("Migrating cards to Many-to-Many schema with merge logic...")
 
                 # IMPORTANT: Disable Foreign Keys during migration to prevent CASCADE deletes
+                conn.commit()  # Close the active transaction first
                 cursor.execute("PRAGMA foreign_keys = OFF")
 
                 # 1. Create junction table (if not exists)
@@ -225,6 +226,7 @@ def init_db():
                 cursor.execute("ALTER TABLE cards_new RENAME TO cards")
 
                 # Re-enable Foreign Keys
+                conn.commit()  # Close transaction before PRAGMA
                 cursor.execute("PRAGMA foreign_keys = ON")
 
                 print("Cards table migrated and merged successfully.")
@@ -240,6 +242,7 @@ def init_db():
                 print("Migrating cards from SM-2 to FSRS schema...")
 
                 # IMPORTANT: Disable Foreign Keys during migration to prevent CASCADE deletes
+                conn.commit()  # Close the active transaction first
                 cursor.execute("PRAGMA foreign_keys = OFF")
 
                 # Fetch all old cards
@@ -299,6 +302,7 @@ def init_db():
                 cursor.execute("ALTER TABLE cards_new RENAME TO cards")
 
                 # Re-enable Foreign Keys
+                conn.commit()  # Close transaction before PRAGMA
                 cursor.execute("PRAGMA foreign_keys = ON")
 
                 print("Cards table migrated to FSRS successfully.")

@@ -874,9 +874,6 @@ def api_study_answer():
         cursor = conn.cursor()
 
         # 1. Update FSRS
-        cursor.execute("SELECT state, step, stability, difficulty, due, last_review FROM cards WHERE id = ?", (card_id,))
-        # wait due -> next_review in our db
-        # Actually in our db, it is next_review
         cursor.execute("SELECT state, step, stability, difficulty, next_review, last_review, reps, lapses FROM cards WHERE id = ?", (card_id,))
         card_row = cursor.fetchone()
         

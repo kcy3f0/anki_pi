@@ -57,16 +57,10 @@ if (-not (Test-Path ".env")) {
         $SecretKey = $DefaultSecretKey
     }
 
-    $DefaultOllamaUrl = "http://127.0.0.1:11434/api/generate"
-    $OllamaUrl = Read-Host "請輸入 OLLAMA_API_URL (預設 $DefaultOllamaUrl)"
-    if ([string]::IsNullOrWhiteSpace($OllamaUrl)) {
-        $OllamaUrl = $DefaultOllamaUrl
-    }
-
     $WebhookUrl = Read-Host "請輸入 DISCORD_WEBHOOK_URL (預設留空)"
 
     # PowerShell 字串插值和換行
-    $EnvContent = "SECRET_KEY=""$SecretKey""`nOLLAMA_API_URL=""$OllamaUrl""`nDISCORD_WEBHOOK_URL=""$WebhookUrl"""
+    $EnvContent = "SECRET_KEY=""$SecretKey""`nDISCORD_WEBHOOK_URL=""$WebhookUrl"""
     Set-Content -Path ".env" -Value $EnvContent -Encoding UTF8
     Write-Host ".env 檔案已建立。" -ForegroundColor Green
 } else {

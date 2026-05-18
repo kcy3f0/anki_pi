@@ -62,7 +62,6 @@
 
     安裝過程中，腳本會協助建立 `.env` 設定檔：
     - `SECRET_KEY`: 自動生成。
-    - `OLLAMA_API_URL`: 預設 `http://127.0.0.1:11434/api/generate`（保留供整合設定使用）。
     - `DISCORD_WEBHOOK_URL`: (選填) 設定 Discord 通知。
 
 3.  **完成!**

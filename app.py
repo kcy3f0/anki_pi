@@ -3,7 +3,7 @@ import random
 import csv
 import io
 from collections import defaultdict
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_file, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from datetime import datetime, timedelta, timezone
 from fsrs import Scheduler, Card, Rating, State
 from config import DB_NAME, SECRET_KEY

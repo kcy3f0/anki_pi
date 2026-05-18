@@ -7,6 +7,8 @@ import sys
 from unittest.mock import MagicMock
 sys.modules['flask'] = MagicMock()
 sys.modules['flask_wtf.csrf'] = MagicMock()
+sys.modules['fsrs'] = MagicMock()
+sys.modules['dotenv'] = MagicMock()
 
 from app import calculate_average_stats
 

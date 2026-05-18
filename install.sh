@@ -57,15 +57,11 @@ else
     read -p "請輸入 SECRET_KEY (預設隨機產生): " INPUT_SECRET_KEY
     SECRET_KEY=${INPUT_SECRET_KEY:-$DEFAULT_SECRET_KEY}
 
-    read -p "請輸入 OLLAMA_API_URL (預設 http://127.0.0.1:11434/api/generate): " INPUT_OLLAMA
-    OLLAMA_API_URL=${INPUT_OLLAMA:-"http://127.0.0.1:11434/api/generate"}
-
     read -p "請輸入 DISCORD_WEBHOOK_URL (預設留空): " DISCORD_WEBHOOK_URL
 
     # 寫入 .env
     cat > .env <<EOF
 SECRET_KEY="${SECRET_KEY}"
-OLLAMA_API_URL="${OLLAMA_API_URL}"
 DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}"
 EOF
     echo -e "${GREEN}.env 檔案已建立。${NC}"

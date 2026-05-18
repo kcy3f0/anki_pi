@@ -1,18 +1,18 @@
 # anki_pi
 
-這是一個基於 Flask 和 SM-2 演算法的輕量級記憶卡 (Anki-like) Web 應用程式，專為在樹莓派 (Raspberry Pi) 或 Intranet 環境上運行而設計。它結合了傳統的抽認卡學習與 Discord 的整合，讓學習過程更有效率。
+這是一個基於 Flask 與 FSRS 排程演算法的輕量級記憶卡 (Anki-like) Web 應用程式，專為在樹莓派 (Raspberry Pi) 或 Intranet 環境上運行而設計。它結合了傳統的抽認卡學習與 Discord 的整合，讓學習過程更有效率。
 
 ## ✨ 主要功能
 
-- **🧠 間隔重複 (Spaced Repetition):** 內建 [SM-2 演算法](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm)，根據你的記憶曲線自動安排複習時間。
+- **🧠 間隔重複 (Spaced Repetition):** 內建 [FSRS 演算法](https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm)，根據作答評分（忘記/困難/普通/簡單）動態安排下次複習時間。
 - **📖 字典查詢:**
-    - 支援外部字典查詢，可點擊字典圖示前往 Collins 字典。
+    - 支援外部字典查詢，可點擊字典圖示前往 Cambridge 字典。
 - **🛠️ 資料庫優化 (Merge Duplicates):**
     - 支援匯入時自動合併重複的單字卡片（將新內容串接於舊內容之後）。
 - **📚 學習模式:**
     - **傳統模式 (Traditional Mode):** 標準的翻卡式學習，支援兩種記憶策略。
 - **📂 方便的卡片管理:**
-    - 支援多層次資料夾與牌組結構。
+    - 支援資料夾與牌組管理（牌組可指派到多個資料夾）。
     - 支援從 CSV 格式「貼上內容」進行批次匯入。
     - 一鍵重置所有學習進度或刪除所有卡片。
 - **🛡️ 安全與備份:**
@@ -28,6 +28,8 @@
 - **後端:** Python, Flask
 - **前端:** 原生 HTML/CSS/JavaScript (無須編譯)
 - **資料庫:** SQLite
+- **記憶排程:** FSRS (`fsrs` 套件)
+- **表單安全:** Flask-WTF + CSRFProtect
 - **環境管理:** dotenv (`config.py` 統一管理)
 
 ---
@@ -48,7 +50,7 @@
 
 1.  **克隆專案:**
     ```bash
-    git clone https://github.com/your-username/anki_pi.git
+    git clone https://github.com/kcy3f0/anki_pi.git
     cd anki_pi
     ```
 
@@ -78,7 +80,7 @@
 1.  **克隆專案:**
     在 PowerShell 或 CMD 中執行：
     ```powershell
-    git clone https://github.com/your-username/anki_pi.git
+    git clone https://github.com/kcy3f0/anki_pi.git
     cd anki_pi
     ```
 

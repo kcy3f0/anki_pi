@@ -1,11 +1,11 @@
 # anki_pi
 
-This is a lightweight Anki-like web application based on Flask and the SM-2 algorithm, designed to run on a Raspberry Pi or other low-power devices. It combines traditional flashcard learning and Discord integration to make the learning process more efficient.
+This is a lightweight Anki-like web application based on Flask and the FSRS scheduling algorithm, designed to run on a Raspberry Pi or other low-power devices. It combines traditional flashcard learning and Discord integration to make the learning process more efficient.
 
 ## ✨ Main Features
 
-- **🧠 Spaced Repetition:** Built-in [SM-2 algorithm](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm) automatically schedules review times based on your memory curve.
-- **📖 Dictionary Link:** Supports external dictionary lookup, allowing you to click the dictionary icon to view the Collins Dictionary definition.
+- **🧠 Spaced Repetition:** Built-in [FSRS algorithm](https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm) dynamically schedules review times based on your rating ("Forgot", "Difficult", "Normal", "Easy").
+- **📖 Dictionary Link:** Supports external dictionary lookup, allowing you to click the dictionary icon to view the Cambridge Dictionary definition.
 - **📚 Learning Modes:**
     - **Traditional Mode:** Standard flashcard learning supporting "Recognize Only" and "Need to Spell" card types.
 - **🛠️ Database Optimization (Merge Duplicates):**

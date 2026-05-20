@@ -3,8 +3,8 @@ import shutil
 import subprocess
 import glob
 from datetime import datetime
+from ..config import DB_NAME
 
-DB_NAME = "flashcards.db"
 BACKUP_DIR = "backups"
 MAX_BACKUPS = 5
 
@@ -44,11 +44,7 @@ def backup_database(reason="manual"):
 def _rotate_backups():
     """Keeps only the latest MAX_BACKUPS files in the backup directory."""
     try:
-        # Pattern matches files starting with flashcards_ and ending in .db
-        # We need to be careful to only select files created by this tool or similar naming
         files = glob.glob(os.path.join(BACKUP_DIR, "flashcards_*.db"))
-
-        # Sort by modification time (newest last)
         files.sort(key=os.path.getmtime)
 
         if len(files) > MAX_BACKUPS:
@@ -62,7 +58,3 @@ def _rotate_backups():
 
     except Exception as e:
         print(f"Error rotating backups: {e}")
-
-if __name__ == "__main__":
-    # Can be run manually
-    backup_database()

@@ -81,7 +81,7 @@ User=$USER_NAME
 Group=$USER_NAME
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin"
-ExecStart=$PROJECT_DIR/venv/bin/python app.py
+ExecStart=$PROJECT_DIR/venv/bin/python src/app.py
 Restart=always
 
 [Install]
@@ -102,7 +102,7 @@ echo -e "${YELLOW}[INFO] 正在設定每日提醒腳本 ($RUN_REMINDER_SCRIPT)..
 cat > "$RUN_REMINDER_SCRIPT" <<EOF
 #!/bin/bash
 cd $PROJECT_DIR
-$PROJECT_DIR/venv/bin/python daily_reminder.py
+$PROJECT_DIR/venv/bin/python -m src.utils.daily_reminder
 EOF
 
 chmod +x "$RUN_REMINDER_SCRIPT"

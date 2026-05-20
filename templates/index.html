@@ -25,7 +25,7 @@
                         {% endif %}
                     </div>
                     {% if folder.total_due > 0 %}
-                        <a href="{{ url_for('study_folder', folder_id=folder.id) }}" class="btn btn-primary" style="padding: 8px 15px; font-size: 0.9rem;">學習資料夾</a>
+                        <a href="{{ url_for('study.study_folder', folder_id=folder.id) }}" class="btn btn-primary" style="padding: 8px 15px; font-size: 0.9rem;">學習資料夾</a>
                     {% endif %}
                 </summary>
                 <div style="padding-left: 20px; margin-top: 10px; display: flex; flex-direction: column; gap: 15px;">
@@ -34,11 +34,11 @@
                             <span style="font-weight: 500;">📇 {{ deck.name }}</span>
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 {% if deck.due_count > 0 %}
-                                    <a href="{{ url_for('study', deck_id=deck.id) }}" class="btn btn-primary" style="padding: 8px 15px;">開始學習 ({{ deck.due_count }})</a>
+                                    <a href="{{ url_for('study.study', deck_id=deck.id) }}" class="btn btn-primary" style="padding: 8px 15px;">開始學習 ({{ deck.due_count }})</a>
                                 {% else %}
                                     <span style="color: #888; font-size: 0.9rem; margin-right: 5px;">已完成</span>
                                 {% endif %}
-                                <a href="{{ url_for('view_deck_cards', deck_id=deck.id) }}" class="btn btn-secondary" style="padding: 8px 15px; font-size: 0.9rem;">查看內容</a>
+                                <a href="{{ url_for('decks.deck_cards', deck_id=deck.id) }}" class="btn btn-secondary" style="padding: 8px 15px; font-size: 0.9rem;">查看內容</a>
                             </div>
                         </div>
                     {% endfor %}
@@ -56,9 +56,9 @@
         <div class="card">
             <h3>🛠️ 管理</h3>
             <div style="display: flex; flex-direction: column; gap: 10px;">
-                <a href="{{ url_for('manage_decks') }}" class="btn btn-gray" style="width: 100%;">🗂️ 管理資料夾與牌組</a>
+                <a href="{{ url_for('decks.manage_decks') }}" class="btn btn-gray" style="width: 100%;">🗂️ 管理資料夾與牌組</a>
                 <a href="/add" class="btn btn-green" style="width: 100%;">✏️ 新增卡片</a>
-                <a href="/import/paste" class="btn btn-red" style="width: 100%;">📋 貼上內容匯入</a>
+                <a href="{{ url_for('cards.import_paste') }}" class="btn btn-red" style="width: 100%;">📋 貼上內容匯入</a>
             </div>
         </div>
 

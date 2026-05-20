@@ -82,8 +82,8 @@ try {
     $PythonPath = Join-Path -Path $CurrentDir.Path -ChildPath "venv\Scripts\python.exe"
     $Shortcut.TargetPath = $PythonPath
 
-    # Arguments: app.py
-    $Shortcut.Arguments = "app.py"
+    # Arguments: src/app.py
+    $Shortcut.Arguments = "src/app.py"
 
     # Working Directory: Project Root
     $Shortcut.WorkingDirectory = $CurrentDir.Path

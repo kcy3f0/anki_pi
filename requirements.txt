@@ -3,3 +3,6 @@ requests
 python-dotenv
 Flask-WTF
 fsrs
+pytest
+pytest-flask
+

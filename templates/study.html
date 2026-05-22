@@ -1,132 +1,398 @@
-{% extends "layout.html" %}
+{% extends "base.html" %}
+
+{% block title %}學習模式 - {{ title }}{% endblock %}
+
 {% block content %}
-    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-        <a href="/" class="btn btn-gray" style="padding: 8px 15px;">↩ 回首頁</a>
-        <span id="due-count-container" style="font-weight: 500; color: var(--text-color); display: {% if due_count > 0 %}inline{% else %}none{% endif %};">
-            今日剩餘: <b id="due-count-value">{{ due_count }}</b>
-        </span>
+<div class="study-wrapper">
+    <!-- Header -->
+    <div class="study-header">
+        <div class="study-header-left">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> 結束學習</a>
+            <h2>正在學習：<span class="study-title">{{ title }}</span></h2>
+        </div>
+        <div class="study-progress-wrapper">
+            <span class="progress-label">待複習: <strong id="due-count">0</strong></span>
+            <span class="progress-label">新卡片: <strong id="new-count">0</strong></span>
+        </div>
     </div>
 
-    <!-- Card Container -->
-    <div id="study-card-container" class="card"
-         style="min-height: 350px; display: {% if card %}flex{% else %}none{% endif %}; flex-direction: column; justify-content: center; align-items: center; text-align: center;"
-         data-card-id="{{ card.id if card else '' }}"
-         data-deck-id="{{ deck_id if deck_id else '' }}"
-         data-folder-id="{{ folder_id if folder_id else '' }}">
+    <!-- Main Study Card Area -->
+    <div class="study-card-container">
+        <!-- The Flip Card -->
+        <div class="flip-card" id="flip-card">
+            <div class="flip-card-inner">
+                <!-- Front Side -->
+                <div class="flip-card-front" id="card-front-side">
+                    <div class="card-badges">
+                        <span class="badge" id="front-type-badge">類型</span>
+                    </div>
+                    <div class="card-main-content">
+                        <h1 class="card-word font-outfit" id="front-text">載入中...</h1>
+                    </div>
+                    <div class="card-actions-row">
+                        <button class="btn-audio" id="tts-btn" title="播放發音"><i class="fa-solid fa-volume-high"></i></button>
+                        <button class="btn-dict" id="dict-btn" title="Cambridge 字典"><i class="fa-solid fa-book"></i></button>
+                    </div>
+                </div>
 
-        <div id="question-area" style="margin-bottom: 1rem;">
-            <h2 id="card-front-text" style="margin: 0; font-size: 2.2rem; font-weight: 600;">{{ card.front if card else '' }}</h2>
+                <!-- Back Side -->
+                <div class="flip-card-back" id="card-back-side">
+                    <div class="card-badges">
+                        <span class="badge" id="back-type-badge">類型</span>
+                    </div>
+                    <div class="card-main-content">
+                        <div class="back-text-container" id="back-text">
+                            釋義載入中...
+                        </div>
+                    </div>
+                    <div class="card-actions-row" id="back-actions-row">
+                        <!-- Dict / Audio will also be visible here for reference -->
+                        <button class="btn-audio" id="tts-btn-back" title="播放發音"><i class="fa-solid fa-volume-high"></i></button>
+                        <button class="btn-dict" id="dict-btn-back" title="Cambridge 字典"><i class="fa-solid fa-book"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interaction Panel -->
+    <div class="study-interaction-panel">
+        
+        <!-- 1. Spell Mode Text Input Panel -->
+        <div class="spell-input-panel hidden" id="spell-panel">
+            <p class="spell-prompt"><i class="fa-solid fa-pen-clip"></i> 請輸入英文拼寫：</p>
+            <div class="spell-input-group">
+                <input type="text" id="spell-input" class="form-control spell-text-field" placeholder="在這裡拼寫單字..." autocomplete="off" autofocus>
+                <button class="btn btn-primary" id="spell-submit-btn">送出答案</button>
+            </div>
+            <div class="spell-result-alert hidden" id="spell-result">
+                <!-- Will be populated dynamically -->
+            </div>
         </div>
 
-        <div id="ans" style="display:none; width: 100%; text-align: center;">
-            <hr style="margin: 20px auto; width: 80%; border-color: var(--border-color);">
-            
-            <div style="margin-bottom: 2rem;">
-                <p id="card-back-text" style="font-size: 1.8rem; color: var(--primary-color); font-weight: 500; margin: 0;">{{ card.back if card else '' }}</p>
-                <a id="dict-link" href="https://dictionary.cambridge.org/zht/%E8%A9%9E%E5%85%B8/%E8%8B%B1%E8%AA%9E-%E6%BC%A2%E8%AA%9E-%E7%B9%81%E9%AB%94/{{ (card.english_word if card and card.english_word else card.front) | urlencode if card else '' }}" target="_blank" class="btn btn-gray" style="border-radius: 50%; width: 45px; height: 45px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-top: 0.5rem; text-decoration: none;">
-                    📖
-                </a>
-            </div>
-
-            <p style="margin-bottom: 1rem; color: #888;">你對這個單字的印象如何？</p>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
-                <button onclick="submitAnswer(1)" class="btn btn-red">忘記</button>
-                <button onclick="submitAnswer(2)" class="btn btn-special">困難</button>
-                <button onclick="submitAnswer(3)" class="btn btn-primary">普通</button>
-                <button onclick="submitAnswer(4)" class="btn btn-green">簡單</button>
-            </div>
+        <!-- 2. "Show Answer" Panel -->
+        <div class="show-answer-panel" id="show-answer-panel">
+            <button class="btn btn-primary btn-lg btn-block" id="btn-show-answer">
+                <i class="fa-solid fa-eye"></i> 顯示答案 (Space)
+            </button>
         </div>
 
-        <button id="show" class="btn btn-primary" style="width: 80%; max-width: 300px; padding: 15px; font-size: 1.1em; margin-top: auto;" onclick="document.getElementById('ans').style.display='block';this.style.display='none'">
-            顯示答案
-        </button>
+        <!-- 3. FSRS Rating Buttons Panel -->
+        <div class="rating-panel hidden" id="rating-panel">
+            <button class="btn-rating btn-again" data-rating="1">
+                <span class="rating-num">1</span>
+                <span class="rating-text">忘記 (Again)</span>
+            </button>
+            <button class="btn-rating btn-hard" data-rating="2">
+                <span class="rating-num">2</span>
+                <span class="rating-text">困難 (Hard)</span>
+            </button>
+            <button class="btn-rating btn-good" data-rating="3">
+                <span class="rating-num">3</span>
+                <span class="rating-text">普通 (Good)</span>
+            </button>
+            <button class="btn-rating btn-easy" data-rating="4">
+                <span class="rating-num">4</span>
+                <span class="rating-text">簡單 (Easy)</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Congrats Container -->
-    <div id="study-congrats-container" class="card text-center" style="display: {% if card %}none{% else %}block{% endif %};">
-        <h3 style="color: var(--green-color);">🎉 恭喜！</h3>
-        <p>今天的單字都背完了。</p>
-        <a href="/" class="btn btn-primary" style="margin-top: 1rem;">回首頁</a>
+    <!-- Complete/Empty State Screen -->
+    <div class="study-complete-screen hidden" id="complete-screen">
+        <div class="complete-content">
+            <i class="fa-solid fa-circle-check complete-icon"></i>
+            <h2>太棒了！</h2>
+            <p>今天的所有記憶卡已經全部複習完畢！🎉</p>
+            <div class="complete-actions">
+                <a href="{{ url_for('index') }}" class="btn btn-primary"><i class="fa-solid fa-home"></i> 返回儀表板</a>
+            </div>
+        </div>
     </div>
+</div>
+{% endblock %}
 
-    <script>
-        async function submitAnswer(quality) {
-            const container = document.getElementById('study-card-container');
-            const cardId = container.dataset.cardId;
-            const deckId = container.dataset.deckId;
-            const folderId = container.dataset.folderId;
+{% block scripts %}
+<script>
+    const modeType = "{{ mode_type }}";
+    const modeId = parseInt("{{ mode_id }}");
+    const globalTtsSpeed = parseFloat("{{ tts_speed }}") || 1.0;
 
-            if (!cardId) return;
+    let dueQueue = [];
+    let newQueue = [];
+    let activeQueue = []; // Current active session cards
+    let currentCard = null;
+    let spellShownSide = 'front'; // In spell mode, is front or back shown initially
 
-            // 增加視覺回饋：降低透明度並禁用點擊
-            container.style.opacity = '0.5';
-            container.style.pointerEvents = 'none';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-            try {
-                const res = await fetch('/api/study/answer', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({
-                        card_id: cardId,
-                        quality: quality,
-                        deck_id: deckId || null,
-                        folder_id: folderId || null
-                    })
-                });
+    // DOM Elements
+    const flipCard = document.getElementById('flip-card');
+    const dueCountEl = document.getElementById('due-count');
+    const newCountEl = document.getElementById('new-count');
+    const frontText = document.getElementById('front-text');
+    const backText = document.getElementById('back-text');
+    const frontTypeBadge = document.getElementById('front-type-badge');
+    const backTypeBadge = document.getElementById('back-type-badge');
+    const ttsBtn = document.getElementById('tts-btn');
+    const dictBtn = document.getElementById('dict-btn');
+    const ttsBtnBack = document.getElementById('tts-btn-back');
+    const dictBtnBack = document.getElementById('dict-btn-back');
 
-                if (!res.ok) {
-                    throw new Error('API Error');
+    const showAnswerPanel = document.getElementById('show-answer-panel');
+    const btnShowAnswer = document.getElementById('btn-show-answer');
+    const ratingPanel = document.getElementById('rating-panel');
+    
+    const spellPanel = document.getElementById('spell-panel');
+    const spellInput = document.getElementById('spell-input');
+    const spellSubmitBtn = document.getElementById('spell-submit-btn');
+    const spellResultAlert = document.getElementById('spell-result');
+    const completeScreen = document.getElementById('complete-screen');
+    const studyWrapper = document.querySelector('.study-wrapper');
+
+    // Load cards on page load
+    window.addEventListener('DOMContentLoaded', () => {
+        fetchCards();
+        setupEventListeners();
+    });
+
+    function fetchCards() {
+        fetch(`/study/api/cards?type=${modeType}&id=${modeId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('載入記憶卡失敗！');
+                    return;
                 }
+                dueQueue = data.due_cards || [];
+                newQueue = data.new_cards || [];
+                
+                // Shuffle both queues
+                shuffleArray(dueQueue);
+                shuffleArray(newQueue);
+                
+                // Active queue: due cards first, then new cards
+                activeQueue = [...dueQueue, ...newQueue];
+                
+                updateProgressUI();
+                showNextCard();
+            })
+            .catch(err => {
+                console.error(err);
+                alert('伺服器連線錯誤！');
+            });
+    }
 
-                const data = await res.json();
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
 
-                if (data.status === 'success') {
-                    updateUI(data);
-                }
-            } catch (err) {
-                console.error("Submit error:", err);
-                alert("提交失敗，請檢查網路連線。");
-            } finally {
-                // 恢復卡片容器的透明度與點擊狀態
-                container.style.opacity = '1';
-                container.style.pointerEvents = 'auto';
-            }
+    function updateProgressUI() {
+        // Calculate remaining in active queue
+        let dueRemaining = activeQueue.filter(c => c.reps > 0).length;
+        let newRemaining = activeQueue.filter(c => c.reps === 0).length;
+        dueCountEl.textContent = dueRemaining;
+        newCountEl.textContent = newRemaining;
+    }
+
+    function showNextCard() {
+        // Reset card flip and state
+        flipCard.classList.remove('flipped');
+        spellResultAlert.classList.add('hidden');
+        spellResultAlert.className = "spell-result-alert hidden";
+        spellInput.value = "";
+
+        if (activeQueue.length === 0) {
+            // Study Complete
+            document.querySelector('.study-card-container').classList.add('hidden');
+            document.querySelector('.study-interaction-panel').classList.add('hidden');
+            completeScreen.classList.remove('hidden');
+            return;
         }
 
-        function updateUI(data) {
-            const countContainer = document.getElementById('due-count-container');
-            const countValue = document.getElementById('due-count-value');
+        currentCard = activeQueue[0];
+        
+        // Populate Front / Back text
+        frontText.textContent = currentCard.front;
+        // Format back text (newlines to br)
+        backText.innerHTML = currentCard.back.replace(/\n/g, '<br>');
 
-            if (data.due_count > 0) {
-                countContainer.style.display = 'inline';
-                countValue.innerText = data.due_count;
+        // Set type badges
+        const typeText = currentCard.card_type === 'spell' ? '拼寫卡 (spell)' : '認得卡 (recognize)';
+        const badgeClass = currentCard.card_type === 'spell' ? 'badge-spell-type' : 'badge-recognize-type';
+        
+        frontTypeBadge.textContent = typeText;
+        frontTypeBadge.className = `badge ${badgeClass}`;
+        backTypeBadge.textContent = typeText;
+        backTypeBadge.className = `badge ${badgeClass}`;
+
+        // Reset display panel states
+        spellPanel.classList.add('hidden');
+        ratingPanel.classList.add('hidden');
+        showAnswerPanel.classList.add('hidden');
+
+        // Check Mode
+        if (currentCard.card_type === 'spell') {
+            // In spell mode, 50% chance to show front first (recognize), 50% chance to show back first (spell)
+            // But if it shows back first, we need to ask user to spell the front!
+            spellShownSide = Math.random() < 0.5 ? 'front' : 'back';
+            
+            if (spellShownSide === 'back') {
+                // Show back initially (flip it!)
+                flipCard.classList.add('flipped');
+                spellPanel.classList.remove('hidden');
+                spellInput.focus();
             } else {
-                countContainer.style.display = 'none';
+                // Show front initially
+                showAnswerPanel.classList.remove('hidden');
             }
+        } else {
+            // Recognize mode: always show front first
+            showAnswerPanel.classList.remove('hidden');
+            // Auto play audio for recognize mode
+            playAudio(currentCard.front);
+        }
+    }
 
-            if (!data.card) {
-                document.getElementById('study-card-container').style.display = 'none';
-                document.getElementById('study-congrats-container').style.display = 'block';
+    function showAnswer() {
+        flipCard.classList.add('flipped');
+        showAnswerPanel.classList.add('hidden');
+        ratingPanel.classList.remove('hidden');
+        
+        // Auto play audio when answer is shown
+        playAudio(currentCard.front);
+    }
+
+    function handleSpellingSubmit() {
+        const userInput = spellInput.value.trim().toLowerCase();
+        const correctWord = currentCard.front.trim().toLowerCase();
+
+        spellPanel.classList.add('hidden');
+        spellResultAlert.classList.remove('hidden');
+        ratingPanel.classList.remove('hidden');
+
+        // Show front side so they can see the word
+        flipCard.classList.remove('flipped');
+
+        if (userInput === correctWord) {
+            spellResultAlert.textContent = "🎉 拼寫正確！";
+            spellResultAlert.className = "spell-result-alert spell-success";
+        } else {
+            spellResultAlert.innerHTML = `❌ 拼寫錯誤！<br>正確答案是：<strong class="font-outfit font-lg">${currentCard.front}</strong><br>您輸入的是：<strong>${spellInput.value}</strong>`;
+            spellResultAlert.className = "spell-result-alert spell-error";
+        }
+
+        // Play audio of the word
+        playAudio(currentCard.front);
+    }
+
+    function submitReview(rating) {
+        fetch('/study/api/review', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                card_id: currentCard.id,
+                rating: rating
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert('提交評估失敗！');
                 return;
             }
+            
+            // FSRS logic: If Rating is 1 (Again), we push it to the end of activeQueue so they review it again.
+            // Otherwise, we completely remove it from activeQueue.
+            const finishedCard = activeQueue.shift(); // Remove from front
+            
+            if (rating === 1) {
+                // Put back in queue to review again in this session
+                activeQueue.push(finishedCard);
+            }
+            
+            updateProgressUI();
+            showNextCard();
+        })
+        .catch(err => {
+            console.error(err);
+            alert('送出作答結果時發生錯誤！');
+        });
+    }
 
-            // Update Card Data
-            const container = document.getElementById('study-card-container');
-            container.dataset.cardId = data.card.id;
-
-            document.getElementById('card-front-text').innerText = data.card.front;
-            document.getElementById('card-back-text').innerText = data.card.back;
-            // Provide fallback to front if english_word is missing
-            const word = data.card.english_word || data.card.front;
-            document.getElementById('dict-link').href = `https://dictionary.cambridge.org/zht/%E8%A9%9E%E5%85%B8/%E8%8B%B1%E8%AA%9E-%E6%BC%A2%E8%AA%9E-%E7%B9%81%E9%AB%94/${encodeURIComponent(word)}`;
-
-            // Reset View (Hide answer, show front)
-            document.getElementById('ans').style.display = 'none';
-            const showBtn = document.getElementById('show');
-            showBtn.style.display = ''; // Revert to CSS default (inline-flex/block)
+    function playAudio(word) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel(); // Stop any currently speaking voice
+            const utterance = new SpeechSynthesisUtterance(word);
+            utterance.lang = 'en-US';
+            utterance.rate = globalTtsSpeed;
+            window.speechSynthesis.speak(utterance);
         }
-    </script>
+    }
+
+    function openDictionary(word) {
+        const cleanWord = encodeURIComponent(word.trim().replace(/\s+/g, '-'));
+        const url = `https://dictionary.cambridge.org/dictionary/english-chinese-traditional/${cleanWord}`;
+        window.open(url, '_blank');
+    }
+
+    function setupEventListeners() {
+        // Show Answer Button
+        btnShowAnswer.addEventListener('click', showAnswer);
+
+        // Spell submit
+        spellSubmitBtn.addEventListener('click', handleSpellingSubmit);
+        spellInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleSpellingSubmit();
+            }
+        });
+
+        // TTS Buttons
+        const playFrontTts = () => playAudio(currentCard.front);
+        ttsBtn.addEventListener('click', (e) => { e.stopPropagation(); playFrontTts(); });
+        ttsBtnBack.addEventListener('click', (e) => { e.stopPropagation(); playFrontTts(); });
+
+        // Dictionary Buttons
+        const openDictLink = () => openDictionary(currentCard.front);
+        dictBtn.addEventListener('click', (e) => { e.stopPropagation(); openDictLink(); });
+        dictBtnBack.addEventListener('click', (e) => { e.stopPropagation(); openDictLink(); });
+
+        // Rating Buttons
+        document.querySelectorAll('.btn-rating').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const rating = parseInt(btn.getAttribute('data-rating'));
+                submitReview(rating);
+            });
+        });
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ignore shortcut if user is typing in spell input
+            if (document.activeElement === spellInput) return;
+
+            // Space key to show answer
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                if (!showAnswerPanel.classList.contains('hidden')) {
+                    showAnswer();
+                }
+            }
+
+            // Keys 1, 2, 3, 4 for rating
+            if (!ratingPanel.classList.contains('hidden')) {
+                if (e.key === '1') submitReview(1);
+                if (e.key === '2') submitReview(2);
+                if (e.key === '3') submitReview(3);
+                if (e.key === '4') submitReview(4);
+            }
+        });
+    }
+</script>
 {% endblock %}

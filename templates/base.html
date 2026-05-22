@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Anki Pi{% endblock %} - Spaced Repetition Web App</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+        // Check local storage for dark mode preference
+        if (localStorage.getItem('dark-mode') === 'true') {
+            document.documentElement.classList.add('dark-mode');
+        }
+    </script>
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <a href="{{ url_for('index') }}" class="app-logo">
+                <i class="fa-solid fa-brain-circuit"></i>
+                <span>Anki Pi</span>
+            </a>
+            <nav class="app-nav">
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                    <i class="fa-solid fa-layer-group"></i> 首頁
+                </a>
+                <a href="{{ url_for('cards_list') }}" class="nav-link {% if request.path.startswith('/cards') %}active{% endif %}">
+                    <i class="fa-solid fa-rectangle-list"></i> 卡片管理
+                </a>
+                <a href="{{ url_for('settings') }}" class="nav-link {% if request.path.startswith('/settings') %}active{% endif %}">
+                    <i class="fa-solid fa-sliders"></i> 設定
+                </a>
+            </nav>
+            <div class="header-actions">
+                <button id="theme-toggle" class="theme-btn" title="切換主題">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">
+                            <div class="flash-icon">
+                                {% if category == 'success' %}
+                                    <i class="fa-solid fa-circle-check"></i>
+                                {% elif category == 'danger' %}
+                                    <i class="fa-solid fa-circle-exclamation"></i>
+                                {% elif category == 'warning' %}
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                {% else %}
+                                    <i class="fa-solid fa-circle-info"></i>
+                                {% endif %}
+                            </div>
+                            <div class="flash-text">{{ message }}</div>
+                            <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+        <div class="footer-container">
+            <p>&copy; 2026 Anki Pi. Powered by FSRS Algorithm. Created under CC BY-NC-SA 4.0.</p>
+        </div>
+    </footer>
+
+    <!-- Global Javascript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

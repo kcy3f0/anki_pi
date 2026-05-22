@@ -1,88 +1,207 @@
-{% extends "layout.html" %}
+{% extends "base.html" %}
+
+{% block title %}首頁 - 儀表板{% endblock %}
+
 {% block content %}
-
-    <!-- Main Status -->
-    <div class="card text-center" style="background: linear-gradient(135deg, var(--primary-color), #673ab7); color: white;">
-        {% if total_due_count > 0 %}
-            <h2 style="margin:0; font-size: 2.5rem; font-weight: 700;">{{ total_due_count }}</h2>
-            <p style="margin:0; font-size: 1.2rem; opacity: 0.9;">張卡片今天到期</p>
-        {% else %}
-            <h2 style="color: white; margin: 0;">🎉 恭喜！</h2>
-            <p style="margin: 0.5rem 0 0; opacity: 0.9;">今天的單字都背完了！</p>
-        {% endif %}
+<div class="dashboard-header">
+    <div class="dashboard-title">
+        <h1>我的學習儀表板</h1>
+        <p>跟隨 FSRS 演算法，持之以恆以達到最佳記憶成效。</p>
     </div>
+    <div class="dashboard-actions">
+        <button class="btn btn-primary" onclick="openModal('add-folder-modal')">
+            <i class="fa-solid fa-folder-plus"></i> 新建資料夾
+        </button>
+        <button class="btn btn-secondary" onclick="openModal('add-deck-modal')">
+            <i class="fa-solid fa-plus"></i> 新建牌組
+        </button>
+    </div>
+</div>
 
-    <!-- Deck List / Study Modes -->
-    <div class="card">
-        <h3>🚀 選擇牌組開始學習</h3>
-        {% for folder in folders %}
-            <details {% if folder.total_due > 0 %}open{% endif %} style="margin-bottom: 0.5rem;">
-                <summary style="font-size: 1.2rem; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        📁 {{ folder.name }}
-                        {% if folder.total_due > 0 %}
-                            <span style="color: var(--red-color);">({{ folder.total_due }})</span>
-                        {% endif %}
+<div class="dashboard-grid">
+    <!-- Folders Section -->
+    <section class="dashboard-section folders-section">
+        <h2><i class="fa-solid fa-folder"></i> 資料夾與牌組</h2>
+        
+        {% if not folders %}
+            <div class="empty-state">
+                <i class="fa-regular fa-folder-open"></i>
+                <p>目前沒有資料夾。可以點擊上方按鈕建立新資料夾。</p>
+            </div>
+        {% else %}
+            <div class="folders-container">
+                {% for folder in folders %}
+                    <div class="folder-card">
+                        <div class="folder-header">
+                            <div class="folder-title-wrapper">
+                                <i class="fa-solid fa-folder-open text-folder"></i>
+                                <h3>{{ folder.name }}</h3>
+                            </div>
+                            <div class="folder-actions-wrapper">
+                                <a href="{{ url_for('study_folder', folder_id=folder.id) }}" class="btn btn-sm btn-success" title="學習此資料夾所有牌組">
+                                    <i class="fa-solid fa-play"></i> 學習
+                                </a>
+                                <form action="{{ url_for('delete_folder', folder_id=folder.id) }}" method="POST" class="inline-form" onsubmit="return confirm('確定要刪除此資料夾嗎？裡面的牌組不會被刪除，但會取消與此資料夾的關聯。');">
+                                    {{ empty_form.csrf_token }}
+                                    <button type="submit" class="btn btn-sm btn-icon btn-danger" title="刪除資料夾">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="folder-decks">
+                            {% if not folder.decks %}
+                                <p class="no-decks">此資料夾內目前沒有指派牌組。</p>
+                            {% else %}
+                                <div class="decks-list">
+                                    {% for deck in folder.decks %}
+                                        <div class="deck-item">
+                                            <div class="deck-info">
+                                                <span class="deck-name">{{ deck.name }}</span>
+                                                <div class="deck-stats">
+                                                    <span class="badge badge-due" title="待複習卡片">{{ deck.due_count }}</span>
+                                                    <span class="badge badge-new" title="新學習卡片">{{ deck.new_count }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="deck-actions">
+                                                <a href="{{ url_for('study_deck', deck_id=deck.id) }}" class="btn btn-xs btn-outline-primary">
+                                                    <i class="fa-solid fa-graduation-cap"></i> 學習
+                                                </a>
+                                                <a href="{{ url_for('edit_deck', deck_id=deck.id) }}" class="btn btn-xs btn-icon btn-outline-secondary" title="編輯牌組">
+                                                    <i class="fa-solid fa-pen"></i>
+                                                </a>
+                                                <form action="{{ url_for('delete_deck', deck_id=deck.id) }}" method="POST" class="inline-form" onsubmit="return confirm('確定要刪除此牌組嗎？牌組內的卡片將不會被關聯，卡片資料仍存在於卡片庫中。');">
+                                                    {{ empty_form.csrf_token }}
+                                                    <button type="submit" class="btn btn-xs btn-icon btn-outline-danger" title="刪除牌組">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
                     </div>
-                    {% if folder.total_due > 0 %}
-                        <a href="{{ url_for('study.study_folder', folder_id=folder.id) }}" class="btn btn-primary" style="padding: 8px 15px; font-size: 0.9rem;">學習資料夾</a>
-                    {% endif %}
-                </summary>
-                <div style="padding-left: 20px; margin-top: 10px; display: flex; flex-direction: column; gap: 15px;">
-                    {% for deck in folder.decks %}
-                        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-color); padding: 10px 15px; border-radius: 8px;">
-                            <span style="font-weight: 500;">📇 {{ deck.name }}</span>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                {% if deck.due_count > 0 %}
-                                    <a href="{{ url_for('study.study', deck_id=deck.id) }}" class="btn btn-primary" style="padding: 8px 15px;">開始學習 ({{ deck.due_count }})</a>
-                                {% else %}
-                                    <span style="color: #888; font-size: 0.9rem; margin-right: 5px;">已完成</span>
-                                {% endif %}
-                                <a href="{{ url_for('decks.deck_cards', deck_id=deck.id) }}" class="btn btn-secondary" style="padding: 8px 15px; font-size: 0.9rem;">查看內容</a>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Unassigned Decks Section -->
+    <section class="dashboard-section unassigned-section">
+        <h2><i class="fa-solid fa-box-archive"></i> 未分類牌組</h2>
+        {% if not unassigned_decks %}
+            <div class="empty-state">
+                <i class="fa-solid fa-check-double"></i>
+                <p>所有牌組皆已指派資料夾。</p>
+            </div>
+        {% else %}
+            <div class="unassigned-container">
+                <div class="decks-list">
+                    {% for deck in unassigned_decks %}
+                        <div class="deck-item">
+                            <div class="deck-info">
+                                <span class="deck-name">{{ deck.name }}</span>
+                                <div class="deck-stats">
+                                    <span class="badge badge-due" title="待複習卡片">{{ deck.due_count }}</span>
+                                    <span class="badge badge-new" title="新學習卡片">{{ deck.new_count }}</span>
+                                </div>
+                            </div>
+                            <div class="deck-actions">
+                                <a href="{{ url_for('study_deck', deck_id=deck.id) }}" class="btn btn-xs btn-outline-primary">
+                                    <i class="fa-solid fa-graduation-cap"></i> 學習
+                                </a>
+                                <a href="{{ url_for('edit_deck', deck_id=deck.id) }}" class="btn btn-xs btn-icon btn-outline-secondary" title="編輯牌組">
+                                    <i class="fa-solid fa-pen"></i>
+                                </a>
+                                <form action="{{ url_for('delete_deck', deck_id=deck.id) }}" method="POST" class="inline-form" onsubmit="return confirm('確定要刪除此牌組嗎？');">
+                                    {{ empty_form.csrf_token }}
+                                    <button type="submit" class="btn btn-xs btn-icon btn-outline-danger" title="刪除牌組">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     {% endfor %}
                 </div>
-            </details>
-        {% else %}
-            <p>沒有任何資料夾或牌組。</p>
-        {% endfor %}
-    </div>
-
-
-    <!-- Action Grid -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-        <!-- Card Management -->
-        <div class="card">
-            <h3>🛠️ 管理</h3>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                <a href="{{ url_for('decks.manage_decks') }}" class="btn btn-gray" style="width: 100%;">🗂️ 管理資料夾與牌組</a>
-                <a href="/add" class="btn btn-green" style="width: 100%;">✏️ 新增卡片</a>
-                <a href="{{ url_for('cards.import_paste') }}" class="btn btn-red" style="width: 100%;">📋 貼上內容匯入</a>
             </div>
+        {% endif %}
+    </section>
+</div>
+
+<!-- Modal: Add Folder -->
+<div id="add-folder-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-folder-plus"></i> 新建資料夾</h3>
+            <span class="close-btn" onclick="closeModal('add-folder-modal')">&times;</span>
         </div>
-
+        <form action="{{ url_for('add_folder') }}" method="POST">
+            <div class="modal-body">
+                {{ folder_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ folder_form.name.id }}">{{ folder_form.name.label }}</label>
+                    {{ folder_form.name(class="form-control", placeholder="例如: 必勝單字, 職場英文...") }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-folder-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <!-- Card List -->
-    <div class="card mt-2">
-        <h3>🗂️ 卡片總覽 (共 {{ cards|length }} 張)</h3>
-        <ul style="list-style: none; padding: 0; max-height: 400px; overflow-y: auto;">
-            {% for card in cards %}
-                <li style="display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid var(--border-color);">
-                    <span>{{ card.front }} - {{ card.back }}</span>
-                    <div>
-                        <span style="background: var(--bg-color); color: var(--text-color); font-size: 0.7em; padding: 3px 8px; border-radius: 10px; margin-right: 10px;">{{ card.deck_name }}</span>
-                        {% if card.card_type == 'spell' %}
-                            <span style="background-color: var(--purple-color); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 10px; margin-right: 10px;">拼寫</span>
-                        {% endif %}
-                        <small style="color: #888;">下次複習: {{ card.next_review }}</small>
+<!-- Modal: Add Deck -->
+<div id="add-deck-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-plus"></i> 新建牌組</h3>
+            <span class="close-btn" onclick="closeModal('add-deck-modal')">&times;</span>
+        </div>
+        <form action="{{ url_for('add_deck') }}" method="POST">
+            <div class="modal-body">
+                {{ deck_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ deck_form.name.id }}">{{ deck_form.name.label }}</label>
+                    {{ deck_form.name(class="form-control", placeholder="例如: 必考多益 U1, 職場常用 50 字...") }}
+                </div>
+                <div class="form-group">
+                    <label>{{ deck_form.folders.label }}</label>
+                    <div class="checkbox-list">
+                        {% for value, label in deck_form.folders.choices %}
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="folders" value="{{ value }}"> {{ label }}
+                            </label>
+                        {% else %}
+                            <p class="text-muted">請先建立資料夾以將牌組歸類。</p>
+                        {% endfor %}
                     </div>
-                </li>
-            {% else %}
-                <li>沒有任何卡片。</li>
-            {% endfor %}
-        </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-deck-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
     </div>
+</div>
+{% endblock %}
 
+{% block scripts %}
+<script>
+    function openModal(id) {
+        document.getElementById(id).classList.add('show');
+    }
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('show');
+    }
+    // Close modal if user clicks outside
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.classList.remove('show');
+        }
+    }
+</script>
 {% endblock %}

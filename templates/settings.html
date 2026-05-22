@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}系統設定{% endblock %}
+
+{% block content %}
+<div class="settings-container-grid">
+    <!-- General Settings -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <h2><i class="fa-solid fa-sliders text-primary"></i> 一般設定</h2>
+        </div>
+        <div class="settings-card-body">
+            <form action="{{ url_for('settings') }}" method="POST">
+                {{ empty_form.csrf_token }}
+                <div class="form-group">
+                    <label for="tts_speed">🔊 TTS 發音語速</label>
+                    <div class="range-slider-container">
+                        <input type="range" id="tts_speed" name="tts_speed" min="0.5" max="2.0" step="0.1" value="{{ tts_speed }}" class="form-range-slider" oninput="document.getElementById('tts_speed_val').innerText = this.value + 'x'">
+                        <span id="tts_speed_val" class="range-slider-value">{{ tts_speed }}x</span>
+                    </div>
+                    <p class="form-help-text">調整單字發音時的播放速度 (範圍: 0.5x 到 2.0x)。</p>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> 儲存設定</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Data Management -->
+    <div class="settings-card danger-zone-card">
+        <div class="settings-card-header">
+            <h2><i class="fa-solid fa-triangle-exclamation text-danger"></i> 危險區域</h2>
+        </div>
+        <div class="settings-card-body">
+            <div class="settings-danger-action">
+                <div class="action-desc">
+                    <h3>重置所有學習進度</h3>
+                    <p>這會將所有單字卡片的穩定度、困難度與複習次數等重設為初始狀態，並將下次複習時間設為今天，您的單字與牌組資料將被保留。</p>
+                </div>
+                <form action="{{ url_for('reset_progress') }}" method="POST" onsubmit="return confirm('⚠️ 確定要重置所有單字的學習進度嗎？此動作將無法復原！');">
+                    {{ empty_form.csrf_token }}
+                    <button type="submit" class="btn btn-warning"><i class="fa-solid fa-arrows-rotate"></i> 重置進度</button>
+                </form>
+            </div>
+            
+            <hr class="settings-divider">
+            
+            <div class="settings-danger-action">
+                <div class="action-desc">
+                    <h3>清空所有資料庫內容</h3>
+                    <p>這會將資料庫中所有的資料夾、牌組與記憶卡片全部刪除！將還原為一個全新的空白資料庫。</p>
+                </div>
+                <form action="{{ url_for('clear_data') }}" method="POST" onsubmit="return confirm('🚨 🚨 🚨 嚴重警告：確定要清空所有資料嗎？這將刪除所有單字卡片、牌組與資料夾，此操作是永久性的，無法撤銷！');">
+                    {{ empty_form.csrf_token }}
+                    <button type="submit" class="btn btn-danger"><i class="fa-solid fa-trash-can"></i> 徹底清空資料</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

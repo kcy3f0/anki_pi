@@ -1,14 +1,10 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load variables from .env file
 load_dotenv()
 
-# Database and file paths
-DB_NAME = "flashcards.db"
-
-# Flask App Configuration
-SECRET_KEY = os.environ.get('SECRET_KEY', 'dev_secret_key_should_be_changed')
-
-# Discord Configuration
-DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'default-dev-secret-key-change-me')
+    DATABASE_PATH = os.environ.get('DATABASE_PATH', 'flashcards.db')
+    DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')

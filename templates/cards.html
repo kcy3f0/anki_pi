@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}卡片管理 - 單字庫{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div class="dashboard-title">
+        <h1>卡片管理庫</h1>
+        <p>在這裡可以查詢、新增、編輯所有記憶卡片，或者進行 CSV 批次匯入。</p>
+    </div>
+    <div class="dashboard-actions">
+        <button class="btn btn-primary" onclick="openModal('add-card-modal')">
+            <i class="fa-solid fa-plus"></i> 新建卡片
+        </button>
+        <button class="btn btn-success" onclick="openModal('import-cards-modal')">
+            <i class="fa-solid fa-file-import"></i> 貼上內容匯入
+        </button>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="search-container">
+    <form action="{{ url_for('cards_list') }}" method="GET" class="search-form">
+        <div class="search-input-wrapper">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" name="search" value="{{ search }}" class="form-control search-input" placeholder="搜尋正面英文或背面中文釋義...">
+        </div>
+        <button type="submit" class="btn btn-primary">搜尋</button>
+        {% if search %}
+            <a href="{{ url_for('cards_list') }}" class="btn btn-outline-secondary">清除</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Cards Table -->
+<div class="table-container">
+    {% if not cards %}
+        <div class="empty-state">
+            <i class="fa-regular fa-folder-open"></i>
+            <p>沒有找到任何卡片。請新建卡片或進行匯入！</p>
+        </div>
+    {% else %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>正面 (英文)</th>
+                    <th>背面 (中文)</th>
+                    <th>類型</th>
+                    <th>所屬牌組</th>
+                    <th>下次複習</th>
+                    <th>複習次數 (錯誤)</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in cards %}
+                    <tr>
+                        <td class="font-outfit font-bold">{{ card.front }}</td>
+                        <td class="text-wrap">{{ card.back }}</td>
+                        <td>
+                            {% if card.card_type == 'spell' %}
+                                <span class="badge badge-spell-type"><i class="fa-solid fa-keyboard"></i> 拼寫</span>
+                            {% else %}
+                                <span class="badge badge-recognize-type"><i class="fa-solid fa-eye"></i> 認得</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% for dname in card.deck_names %}
+                                <span class="badge badge-deck-name">{{ dname }}</span>
+                            {% else %}
+                                <span class="badge badge-no-deck">無牌組</span>
+                            {% endfor %}
+                        </td>
+                        <td class="text-sm">{{ card.next_review.split('T')[0] if card.next_review else 'N/A' }}</td>
+                        <td class="text-sm">{{ card.reps or 0 }}次 ({{ card.lapses or 0 }}次)</td>
+                        <td>
+                            <div class="table-actions">
+                                <a href="{{ url_for('edit_card', card_id=card.id) }}" class="btn btn-xs btn-icon btn-outline-secondary" title="編輯">
+                                    <i class="fa-solid fa-pen"></i>
+                                </a>
+                                <form action="{{ url_for('delete_card', card_id=card.id) }}" method="POST" class="inline-form" onsubmit="return confirm('確定要刪除這張卡片嗎？');">
+                                    {{ empty_form.csrf_token }}
+                                    <button type="submit" class="btn btn-xs btn-icon btn-outline-danger" title="刪除">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                    <a href="{{ url_for('cards_list', search=search, page=page-1) }}" class="page-link">&laquo; 上一頁</a>
+                {% endif %}
+                
+                <span class="page-info">第 {{ page }} / {{ total_pages }} 頁 (共 {{ total }} 筆)</span>
+                
+                {% if page < total_pages %}
+                    <a href="{{ url_for('cards_list', search=search, page=page+1) }}" class="page-link">下一頁 &raquo;</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+
+<!-- Modal: Add Card -->
+<div id="add-card-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-plus"></i> 新建卡片</h3>
+            <span class="close-btn" onclick="closeModal('add-card-modal')">&times;</span>
+        </div>
+        <form action="{{ url_for('add_card') }}" method="POST">
+            <div class="modal-body">
+                {{ card_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ card_form.front.id }}">{{ card_form.front.label }}</label>
+                    {{ card_form.front(class="form-control", placeholder="例如: Apple, accomplish...") }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ card_form.back.id }}">{{ card_form.back.label }}</label>
+                    {{ card_form.back(class="form-control", rows="3", placeholder="例如: n. 蘋果") }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ card_form.card_type.id }}">{{ card_form.card_type.label }}</label>
+                    {{ card_form.card_type(class="form-control") }}
+                </div>
+                <div class="form-group">
+                    <label>{{ card_form.decks.label }}</label>
+                    <div class="checkbox-list">
+                        {% for value, label in card_form.decks.choices %}
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="decks" value="{{ value }}"> {{ label }}
+                            </label>
+                        {% else %}
+                            <p class="text-danger">請先到首頁建立牌組，才能建立卡片。</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-card-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Import Cards -->
+<div id="import-cards-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-file-import"></i> 貼上內容匯入 (CSV 格式)</h3>
+            <span class="close-btn" onclick="closeModal('import-cards-modal')">&times;</span>
+        </div>
+        <form action="{{ url_for('import_csv') }}" method="POST">
+            <div class="modal-body">
+                {{ import_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ import_form.csv_text.id }}">{{ import_form.csv_text.label }}</label>
+                    {{ import_form.csv_text(class="form-control", rows="8", placeholder="格式: 英文,中文[,類型(recognize/spell)]\n例如:\napple,蘋果\nbanana,香蕉,spell\ncat,貓,recognize") }}
+                    <p class="form-help-text">提示：若匯入的單字（正面英文）已存在於資料庫，系統會自動合併釋義，將新中文寫在舊中文之後。</p>
+                </div>
+                <div class="form-group">
+                    <label>{{ import_form.decks.label }}</label>
+                    <div class="checkbox-list">
+                        {% for value, label in import_form.decks.choices %}
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="decks" value="{{ value }}"> {{ label }}
+                            </label>
+                        {% else %}
+                            <p class="text-danger">請先建立牌組，才能匯入卡片。</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('import-cards-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">匯入</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openModal(id) {
+        document.getElementById(id).classList.add('show');
+    }
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('show');
+    }
+    // Close modal if user clicks outside
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.classList.remove('show');
+        }
+    }
+</script>
+{% endblock %}

@@ -1,106 +1,109 @@
-# 確保腳本發生錯誤時停止執行 (類似 set -e)
-$ErrorActionPreference = "Stop"
+param (
+    [switch]$NonInteractive = $false
+)
 
-Write-Host "=== 開始安裝 Anki Pi (Windows) ===" -ForegroundColor Green
+# Windows Installation Script for Anki Pi
+# Run this script with PowerShell.
 
-# 1. 檢查 Python 和 Git
-if (-not (Get-Command "python" -ErrorAction SilentlyContinue)) {
-    Write-Host "錯誤: 找不到 Python。請先安裝 Python 並確保已加入系統 PATH。" -ForegroundColor Red
-    Write-Host "您可以從 https://www.python.org/downloads/ 下載安裝。"
-    Read-Host "按 Enter 鍵退出..."
-    exit 1
+$PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if ([string]::IsNullOrEmpty($PSScriptRoot)) {
+    $PSScriptRoot = Get-Location
 }
-if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
-    Write-Host "錯誤: 找不到 Git。請先安裝 Git 並確保已加入系統 PATH。" -ForegroundColor Red
-    Write-Host "您可以從 https://git-scm.com/downloads 下載安裝。"
-    Read-Host "按 Enter 鍵退出..."
-    exit 1
+Set-Location $PSScriptRoot
+
+Write-Host "==================================================" -ForegroundColor Cyan
+Write-Host "       Anki Pi Installation Script (Windows)       " -ForegroundColor Cyan
+Write-Host "==================================================" -ForegroundColor Cyan
+
+# 1. Check Python
+Write-Host "Checking Python installation..." -ForegroundColor Yellow
+$pythonCheck = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pythonCheck) {
+    Write-Error "Python executable not found. Please install Python and make sure to check 'Add Python to PATH'."
+    Exit
 }
+$pyVersion = python --version
+Write-Host "Detected Python: $pyVersion" -ForegroundColor Green
 
-$CurrentDir = Get-Location
-Write-Host "[INFO] 安裝路徑: $($CurrentDir.Path)" -ForegroundColor Yellow
-
-# 2. 建立 Python 虛擬環境
+# 2. Create Virtual Environment
 if (-not (Test-Path "venv")) {
-    Write-Host "[INFO] 正在建立 Python 虛擬環境 (venv)..." -ForegroundColor Yellow
+    Write-Host "Creating Python virtual environment (venv)..." -ForegroundColor Yellow
     python -m venv venv
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "錯誤: 建立虛擬環境失敗。" -ForegroundColor Red
-        Read-Host "按 Enter 鍵退出..."
-        exit 1
+    if (Test-Path "venv") {
+        Write-Host "Virtual environment created successfully." -ForegroundColor Green
+    } else {
+        Write-Error "Failed to create virtual environment!"
+        Exit
     }
 } else {
-    Write-Host "[INFO] 虛擬環境已存在，跳過建立。" -ForegroundColor Yellow
+    Write-Host "Virtual environment already exists." -ForegroundColor Green
 }
 
-# 3. 安裝 Python 依賴
-Write-Host "[INFO] 正在安裝/更新 Python 套件..." -ForegroundColor Yellow
-& ".\venv\Scripts\python.exe" -m pip install --upgrade pip
+# 3. Upgrade pip and Install requirements
+Write-Host "Upgrading pip and installing requirements..." -ForegroundColor Yellow
+& ".\venv\Scripts\python.exe" -m pip install --upgrade pip -q
 & ".\venv\Scripts\pip.exe" install -r requirements.txt
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "錯誤: 安裝依賴失敗。" -ForegroundColor Red
-    Read-Host "按 Enter 鍵退出..."
-    exit 1
-}
-
-# 4. 設定環境變數 (.env)
-if (-not (Test-Path ".env")) {
-    Write-Host "=== 設定環境變數 ===" -ForegroundColor Green
-    Write-Host "請依序輸入以下設定 (直接按 Enter 將使用預設值或留空):"
-
-    # 生成隨機 SECRET_KEY
-    # 注意: python -c 在 PowerShell 中引號處理需要小心，這裡使用單引號包裹 Python 代碼
-    $DefaultSecretKey = python -c "import secrets; print(secrets.token_hex(16))"
-    $SecretKey = Read-Host "請輸入 SECRET_KEY (預設隨機產生)"
-    if ([string]::IsNullOrWhiteSpace($SecretKey)) {
-        $SecretKey = $DefaultSecretKey
-    }
-
-    $WebhookUrl = Read-Host "請輸入 DISCORD_WEBHOOK_URL (預設留空)"
-
-    # PowerShell 字串插值和換行
-    $EnvContent = "SECRET_KEY=""$SecretKey""`nDISCORD_WEBHOOK_URL=""$WebhookUrl"""
-    Set-Content -Path ".env" -Value $EnvContent -Encoding UTF8
-    Write-Host ".env 檔案已建立。" -ForegroundColor Green
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Requirements installed successfully!" -ForegroundColor Green
 } else {
-    Write-Host "[INFO] .env 檔案已存在，跳過設定。" -ForegroundColor Yellow
+    Write-Error "Failed to install packages."
+    Exit
 }
 
-# 5. 建立桌面捷徑
+# 4. Generate .env Configuration
+if (-not (Test-Path ".env")) {
+    Write-Host "Setting up environment configuration (.env)..." -ForegroundColor Yellow
+    
+    # Generate random key
+    $bytes = New-Object Byte[] 24
+    $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
+    $rng.GetBytes($bytes)
+    $secretKey = [System.Convert]::ToBase64String($bytes)
+    
+    $discordWebhook = ""
+    if ($NonInteractive) {
+        Write-Host "Non-interactive mode, skipping Discord Webhook URL prompt." -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host "Do you want to configure Discord Webhook Notification?" -ForegroundColor Cyan
+        Write-Host "If yes, paste the Discord Webhook URL below. Otherwise, press Enter to skip."
+        $discordWebhook = Read-Host "Discord Webhook URL (Optional)"
+    }
+    
+    $envContent = @"
+SECRET_KEY=$secretKey
+DATABASE_PATH=flashcards.db
+DISCORD_WEBHOOK_URL=$discordWebhook
+"@
+    $envContent | Out-File -FilePath ".env" -Encoding utf8
+    Write-Host ".env configuration created." -ForegroundColor Green
+} else {
+    Write-Host ".env configuration already exists." -ForegroundColor Green
+}
+
+# 5. Create Desktop Shortcut
+Write-Host "Creating desktop shortcut..." -ForegroundColor Yellow
 try {
-    $DesktopPath = [Environment]::GetFolderPath("Desktop")
-    $ShortcutPath = Join-Path -Path $DesktopPath -ChildPath "Anki Pi.lnk"
-
-    Write-Host "[INFO] 正在建立桌面捷徑: $ShortcutPath" -ForegroundColor Yellow
-
-    $WshShell = New-Object -comObject WScript.Shell
-    $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-
-    # Target: venv python executable
-    # 使用完整路徑確保正確
-    $PythonPath = Join-Path -Path $CurrentDir.Path -ChildPath "venv\Scripts\python.exe"
-    $Shortcut.TargetPath = $PythonPath
-
-    # Arguments: src/app.py
-    $Shortcut.Arguments = "src/app.py"
-
-    # Working Directory: Project Root
-    $Shortcut.WorkingDirectory = $CurrentDir.Path
-
-    # Description
-    $Shortcut.Description = "Anki Pi Web Application"
-
+    $desktop = [System.Environment]::GetFolderPath('Desktop')
+    $shortcutPath = Join-Path $desktop "Anki Pi.lnk"
+    
+    $WshShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WshShell.CreateShortcut($shortcutPath)
+    $Shortcut.TargetPath = "cmd.exe"
+    # Safely construct cmd.exe arguments with single quotes
+    $Shortcut.Arguments = '/c cd /d "' + $PSScriptRoot + '" && .\venv\Scripts\python.exe app.py'
+    $Shortcut.WorkingDirectory = $PSScriptRoot
+    $Shortcut.Description = "Start Anki Pi Server"
     $Shortcut.Save()
-    Write-Host "捷徑建立成功！" -ForegroundColor Green
+    
+    Write-Host "Shortcut created successfully on Desktop (Anki Pi.lnk)!" -ForegroundColor Green
 } catch {
-    Write-Host "警告: 建立捷徑失敗。您可以手動建立指向 $CurrentDir.Path\venv\Scripts\python.exe app.py 的捷徑。" -ForegroundColor Red
-    Write-Host "錯誤訊息: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Warning "Failed to create desktop shortcut. You can still run the app by executing 'python app.py' directly."
 }
 
-# 6. 完成
-Write-Host "=== 安裝完成！ ===" -ForegroundColor Green
-Write-Host "您現在可以透過桌面的 'Anki Pi' 捷徑啟動應用程式。"
-Write-Host "啟動後請瀏覽器開啟： http://127.0.0.1:10000"
-Write-Host "注意: 啟動時會出現一個黑色視窗，請勿關閉它，否則服務將停止。"
-Read-Host "按 Enter 鍵結束..."
+Write-Host "==================================================" -ForegroundColor Green
+Write-Host "  Anki Pi Installation Completed!                 " -ForegroundColor Green
+Write-Host "  1. Double click 'Anki Pi' shortcut on Desktop.  " -ForegroundColor Green
+Write-Host "  2. Open browser at: http://127.0.0.1:10000       " -ForegroundColor Green
+Write-Host "==================================================" -ForegroundColor Green

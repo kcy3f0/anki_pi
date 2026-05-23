@@ -30,7 +30,6 @@
                         <h1 class="card-word font-outfit" id="front-text">載入中...</h1>
                     </div>
                     <div class="card-actions-row">
-                        <button class="btn-audio" id="tts-btn" title="播放發音"><i class="fa-solid fa-volume-high"></i></button>
                         <button class="btn-dict" id="dict-btn" title="Cambridge 字典"><i class="fa-solid fa-book"></i></button>
                     </div>
                 </div>
@@ -46,8 +45,7 @@
                         </div>
                     </div>
                     <div class="card-actions-row" id="back-actions-row">
-                        <!-- Dict / Audio will also be visible here for reference -->
-                        <button class="btn-audio" id="tts-btn-back" title="播放發音"><i class="fa-solid fa-volume-high"></i></button>
+                        <!-- Dict will also be visible here for reference -->
                         <button class="btn-dict" id="dict-btn-back" title="Cambridge 字典"><i class="fa-solid fa-book"></i></button>
                     </div>
                 </div>
@@ -116,7 +114,7 @@
 <script>
     const modeType = "{{ mode_type }}";
     const modeId = parseInt("{{ mode_id }}");
-    const globalTtsSpeed = parseFloat("{{ tts_speed }}") || 1.0;
+
 
     let dueQueue = [];
     let newQueue = [];
@@ -134,9 +132,7 @@
     const backText = document.getElementById('back-text');
     const frontTypeBadge = document.getElementById('front-type-badge');
     const backTypeBadge = document.getElementById('back-type-badge');
-    const ttsBtn = document.getElementById('tts-btn');
     const dictBtn = document.getElementById('dict-btn');
-    const ttsBtnBack = document.getElementById('tts-btn-back');
     const dictBtnBack = document.getElementById('dict-btn-back');
 
     const showAnswerPanel = document.getElementById('show-answer-panel');
@@ -252,8 +248,7 @@
         } else {
             // Recognize mode: always show front first
             showAnswerPanel.classList.remove('hidden');
-            // Auto play audio for recognize mode
-            playAudio(currentCard.front);
+
         }
     }
 
@@ -262,8 +257,7 @@
         showAnswerPanel.classList.add('hidden');
         ratingPanel.classList.remove('hidden');
         
-        // Auto play audio when answer is shown
-        playAudio(currentCard.front);
+
     }
 
     function handleSpellingSubmit() {
@@ -285,8 +279,7 @@
             spellResultAlert.className = "spell-result-alert spell-error";
         }
 
-        // Play audio of the word
-        playAudio(currentCard.front);
+
     }
 
     function submitReview(rating) {
@@ -326,15 +319,7 @@
         });
     }
 
-    function playAudio(word) {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel(); // Stop any currently speaking voice
-            const utterance = new SpeechSynthesisUtterance(word);
-            utterance.lang = 'en-US';
-            utterance.rate = globalTtsSpeed;
-            window.speechSynthesis.speak(utterance);
-        }
-    }
+
 
     function openDictionary(word) {
         const cleanWord = encodeURIComponent(word.trim().replace(/\s+/g, '-'));
@@ -354,10 +339,7 @@
             }
         });
 
-        // TTS Buttons
-        const playFrontTts = () => playAudio(currentCard.front);
-        ttsBtn.addEventListener('click', (e) => { e.stopPropagation(); playFrontTts(); });
-        ttsBtnBack.addEventListener('click', (e) => { e.stopPropagation(); playFrontTts(); });
+
 
         // Dictionary Buttons
         const openDictLink = () => openDictionary(currentCard.front);

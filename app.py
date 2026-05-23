@@ -207,8 +207,7 @@ def study_deck(deck_id):
     if not deck:
         flash('找不到該牌組！', 'danger')
         return redirect(url_for('index'))
-    tts_speed = db.get_setting('tts_speed', '1.0')
-    return render_template('study.html', mode_type='deck', mode_id=deck_id, title=deck['name'], tts_speed=tts_speed)
+    return render_template('study.html', mode_type='deck', mode_id=deck_id, title=deck['name'])
 
 @app.route('/study/folder/<int:folder_id>')
 def study_folder(folder_id):
@@ -218,8 +217,7 @@ def study_folder(folder_id):
     if not folder:
         flash('找不到該資料夾！', 'danger')
         return redirect(url_for('index'))
-    tts_speed = db.get_setting('tts_speed', '1.0')
-    return render_template('study.html', mode_type='folder', mode_id=folder_id, title=folder['name'], tts_speed=tts_speed)
+    return render_template('study.html', mode_type='folder', mode_id=folder_id, title=folder['name'])
 
 # Study APIs
 
@@ -263,16 +261,9 @@ def review_card_api():
 
 # Settings Routing
 
-@app.route('/settings', methods=['GET', 'POST'])
+@app.route('/settings')
 def settings():
-    if request.method == 'POST':
-        tts_speed = request.form.get('tts_speed', '1.0')
-        db.set_setting('tts_speed', tts_speed)
-        flash('設定更新成功！', 'success')
-        return redirect(url_for('settings'))
-        
-    tts_speed = db.get_setting('tts_speed', '1.0')
-    return render_template('settings.html', tts_speed=tts_speed)
+    return render_template('settings.html')
 
 @app.route('/settings/reset-progress', methods=['POST'])
 def reset_progress():

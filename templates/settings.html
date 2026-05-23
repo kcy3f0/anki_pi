@@ -4,27 +4,6 @@
 
 {% block content %}
 <div class="settings-container-grid">
-    <!-- General Settings -->
-    <div class="settings-card">
-        <div class="settings-card-header">
-            <h2><i class="fa-solid fa-sliders text-primary"></i> 一般設定</h2>
-        </div>
-        <div class="settings-card-body">
-            <form action="{{ url_for('settings') }}" method="POST">
-                {{ empty_form.csrf_token }}
-                <div class="form-group">
-                    <label for="tts_speed">🔊 TTS 發音語速</label>
-                    <div class="range-slider-container">
-                        <input type="range" id="tts_speed" name="tts_speed" min="0.5" max="2.0" step="0.1" value="{{ tts_speed }}" class="form-range-slider" oninput="document.getElementById('tts_speed_val').innerText = this.value + 'x'">
-                        <span id="tts_speed_val" class="range-slider-value">{{ tts_speed }}x</span>
-                    </div>
-                    <p class="form-help-text">調整單字發音時的播放速度 (範圍: 0.5x 到 2.0x)。</p>
-                </div>
-                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> 儲存設定</button>
-            </form>
-        </div>
-    </div>
-
     <!-- Data Management -->
     <div class="settings-card danger-zone-card">
         <div class="settings-card-header">

@@ -8,6 +8,7 @@ from config import Config
 
 def get_db_connection():
     conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -454,9 +455,38 @@ def submit_card_review(card_id, rating_val):
     if rating_val == 1: # Rating.Again
         lapses += 1
         
+    # Check if there is an upcoming exam for this card's decks/folders
+    earliest_exam_row = cur.execute("""
+        SELECT MIN(e.date) FROM exams e
+        WHERE e.date > ? AND e.processed = 0
+          AND (
+              e.id IN (
+                  SELECT exam_id FROM exam_decks
+                  WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
+              )
+              OR
+              e.id IN (
+                  SELECT exam_id FROM exam_folders
+                  WHERE folder_id IN (
+                      SELECT folder_id FROM deck_folders
+                      WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
+                  )
+              )
+          )
+    """, (format_datetime_for_db(now), card_id, card_id)).fetchone()
+    
+    adjusted_due = new_card.due
+    if earliest_exam_row and earliest_exam_row[0]:
+        earliest_exam_date = parse_db_datetime(earliest_exam_row[0])
+        if adjusted_due >= earliest_exam_date:
+            capped_due = earliest_exam_date - timedelta(days=1)
+            if capped_due < now:
+                capped_due = now
+            adjusted_due = capped_due
+
     # Format datetimes
     last_review_str = format_datetime_for_db(new_card.last_review)
-    next_review_str = format_datetime_for_db(new_card.due)
+    next_review_str = format_datetime_for_db(adjusted_due)
     
     cur.execute("""
         UPDATE cards
@@ -514,6 +544,9 @@ def delete_all_app_data():
     conn.execute("DELETE FROM decks")
     conn.execute("DELETE FROM folders")
     conn.execute("DELETE FROM deck_folders")
+    conn.execute("DELETE FROM exams")
+    conn.execute("DELETE FROM exam_decks")
+    conn.execute("DELETE FROM exam_folders")
     conn.execute("DELETE FROM sqlite_sequence") # Reset autoincrement ids
     conn.commit()
     conn.close()
@@ -538,3 +571,381 @@ def set_setting(key, value):
         cur.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
+
+# --- Exam Schedule & Vocabulary Adjustments ---
+
+def parse_input_datetime(date_str):
+    try:
+        # If it has T and no timezone offset, it's local time from datetime-local
+        if 'T' in date_str and '+' not in date_str and '-' not in date_str[10:] and not date_str.endswith('Z'):
+            naive_dt = datetime.fromisoformat(date_str)
+            # Localize to current local time and convert to UTC
+            local_dt = naive_dt.astimezone()
+            return local_dt.astimezone(timezone.utc)
+        else:
+            # Otherwise parse normally using parse_db_datetime or fromisoformat
+            return datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+    except Exception:
+        # Fallback to date only
+        try:
+            naive_date = datetime.strptime(date_str, "%Y-%m-%d")
+            local_dt = naive_date.astimezone()
+            return local_dt.astimezone(timezone.utc)
+        except Exception:
+            return datetime.now(timezone.utc)
+
+def distribute_exam_cards(exam_id):
+    import random
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    exam = cur.execute("SELECT date FROM exams WHERE id = ?", (exam_id,)).fetchone()
+    if not exam:
+        conn.close()
+        return
+        
+    exam_date = parse_db_datetime(exam['date'])
+    if not exam_date:
+        conn.close()
+        return
+        
+    # Get all cards in scope
+    rows = cur.execute("""
+        SELECT id, reps, next_review FROM cards
+        WHERE id IN (
+            SELECT DISTINCT cd.card_id FROM card_decks cd
+            WHERE cd.deck_id IN (
+                SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                UNION
+                SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                    SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                )
+            )
+        )
+    """, (exam_id, exam_id)).fetchall()
+    
+    now = datetime.now(timezone.utc)
+    
+    # Filter cards: reps = 0 or next_review > exam_date
+    filtered_card_ids = []
+    for r in rows:
+        reps = r['reps'] or 0
+        next_review_str = r['next_review']
+        next_review = parse_db_datetime(next_review_str)
+        
+        if reps == 0 or (next_review and next_review > exam_date):
+            filtered_card_ids.append(r['id'])
+            
+    if not filtered_card_ids:
+        conn.close()
+        return
+        
+    # Shuffle card list for even mixed distribution
+    random.shuffle(filtered_card_ids)
+    
+    # Calculate days remaining (today to day before exam)
+    target_days = (exam_date.date() - now.date()).days
+    slots = max(1, target_days)
+    
+    for i, card_id in enumerate(filtered_card_ids):
+        day_offset = i % slots
+        if (exam_date - now).total_seconds() <= 0:
+            scheduled_dt = now
+        else:
+            # We want to schedule it at the current time on the target day.
+            # Add a small random jitter (e.g. 0-60 minutes) to avoid exact same timestamp.
+            jitter_minutes = random.randint(0, 60)
+            scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
+            
+            # Capping it to make sure it's not past the exam date
+            if scheduled_dt >= exam_date:
+                scheduled_dt = exam_date - timedelta(minutes=1)
+                
+        scheduled_str = format_datetime_for_db(scheduled_dt)
+        cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
+        
+    conn.commit()
+    conn.close()
+
+def process_expired_exams():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    now = datetime.now(timezone.utc)
+    now_str = format_datetime_for_db(now)
+    
+    # Find all expired exams that are not processed yet
+    expired = cur.execute("SELECT id FROM exams WHERE date <= ? AND processed = 0", (now_str,)).fetchall()
+    
+    for row in expired:
+        expired_id = row['id']
+        
+        # Get decks in the expired exam
+        expired_decks = cur.execute("""
+            SELECT deck_id FROM exam_decks WHERE exam_id = ?
+            UNION
+            SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                SELECT folder_id FROM exam_folders WHERE exam_id = ?
+            )
+        """, (expired_id, expired_id)).fetchall()
+        expired_deck_ids = [d['deck_id'] for d in expired_decks]
+        
+        # Mark as processed
+        cur.execute("UPDATE exams SET processed = 1 WHERE id = ?", (expired_id,))
+        conn.commit()
+        
+        # If there are decks, check overlapping upcoming exams
+        if expired_deck_ids:
+            upcoming = cur.execute("SELECT id FROM exams WHERE date > ? AND processed = 0 ORDER BY date ASC", (now_str,)).fetchall()
+            for u_row in upcoming:
+                u_id = u_row['id']
+                u_decks = cur.execute("""
+                    SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                    UNION
+                    SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                        SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                    )
+                """, (u_id, u_id)).fetchall()
+                u_deck_ids = [d['deck_id'] for d in u_decks]
+                
+                # Check overlap
+                if any(d in expired_deck_ids for d in u_deck_ids):
+                    # Release connection before calling child
+                    conn.close()
+                    distribute_exam_cards(u_id)
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    break
+                    
+    conn.close()
+
+def get_all_exams():
+    conn = get_db_connection()
+    exams = conn.execute("SELECT * FROM exams ORDER BY date ASC").fetchall()
+    
+    exam_list = []
+    now = datetime.now(timezone.utc)
+    
+    for e in exams:
+        e_dict = dict(e)
+        exam_id = e['id']
+        
+        # Get associated decks
+        decks = conn.execute("""
+            SELECT d.id, d.name FROM decks d
+            JOIN exam_decks ed ON d.id = ed.deck_id
+            WHERE ed.exam_id = ?
+        """, (exam_id,)).fetchall()
+        e_dict['decks'] = [dict(d) for d in decks]
+        
+        # Get associated folders
+        folders = conn.execute("""
+            SELECT f.id, f.name FROM folders f
+            JOIN exam_folders ef ON f.id = ef.folder_id
+            WHERE ef.exam_id = ?
+        """, (exam_id,)).fetchall()
+        e_dict['folders'] = [dict(f) for f in folders]
+        
+        # Calculate stats and progress
+        cards = conn.execute("""
+            SELECT c.id, c.reps, c.next_review FROM cards c
+            WHERE c.id IN (
+                SELECT cd.card_id FROM card_decks cd
+                WHERE cd.deck_id IN (
+                    SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                    UNION
+                    SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                        SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                    )
+                )
+            )
+        """, (exam_id, exam_id)).fetchall()
+        
+        total_cards = len(cards)
+        learned_cards = sum(1 for c in cards if (c['reps'] or 0) > 0)
+        
+        e_dict['total_cards'] = total_cards
+        e_dict['learned_cards'] = learned_cards
+        e_dict['progress_percent'] = int((learned_cards / total_cards * 100)) if total_cards > 0 else 0
+        
+        # Countdown details
+        exam_date = parse_db_datetime(e['date'])
+        delta = exam_date - now
+        e_dict['days_remaining'] = delta.days
+        e_dict['seconds_remaining'] = int(delta.total_seconds())
+        
+        if delta.total_seconds() <= 0:
+            e_dict['countdown_str'] = "已結束"
+            e_dict['is_expired'] = True
+        else:
+            e_dict['is_expired'] = False
+            days = delta.days
+            hours = int((delta.total_seconds() % 86400) // 3600)
+            if days > 0:
+                e_dict['countdown_str'] = f"剩餘 {days} 天 {hours} 小時"
+            else:
+                minutes = int((delta.total_seconds() % 3600) // 60)
+                e_dict['countdown_str'] = f"剩餘 {hours} 小時 {minutes} 分鐘"
+                
+        exam_list.append(e_dict)
+        
+    conn.close()
+    return exam_list
+
+def create_exam(name, date_str, deck_ids=None, folder_ids=None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    utc_dt = parse_input_datetime(date_str)
+    date_formatted = format_datetime_for_db(utc_dt)
+    
+    cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name.strip(), date_formatted))
+    exam_id = cur.lastrowid
+    
+    if deck_ids:
+        for did in deck_ids:
+            cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+            
+    if folder_ids:
+        for fid in folder_ids:
+            cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+            
+    conn.commit()
+    conn.close()
+    
+    # Distribute vocabulary schedule for the new exam
+    distribute_exam_cards(exam_id)
+    
+    # Send Discord notification
+    msg = f"📅 新增考試行程通知：\n- 考試：{name.strip()}\n- 日期：{utc_dt.astimezone().strftime('%Y/%m/%d %H:%M')}"
+    send_discord_message(msg)
+    
+    return exam_id
+
+def delete_exam(exam_id):
+    conn = get_db_connection()
+    # Fetch details for notification
+    exam = conn.execute("SELECT name FROM exams WHERE id = ?", (exam_id,)).fetchone()
+    conn.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
+    conn.commit()
+    conn.close()
+    if exam:
+        send_discord_message(f"🗑️ 考試行程已刪除：{exam['name']}")
+
+def import_exams_csv(csv_text):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    reader = csv.reader(csv_text.strip().splitlines())
+    imported_count = 0
+    
+    for row in reader:
+        if not row or len(row) < 4:
+            continue
+            
+        name = row[0].strip()
+        date_str = row[1].strip()
+        scope_type = row[2].strip().lower()
+        scope_name = row[3].strip()
+        
+        if not name or not date_str or not scope_name:
+            continue
+            
+        if ' ' not in date_str and 'T' not in date_str:
+            date_str += " 08:00"
+            
+        parsed_date_str = date_str.replace(' ', 'T')
+        
+        deck_ids = []
+        folder_ids = []
+        
+        if scope_type == 'deck':
+            deck = cur.execute("SELECT id FROM decks WHERE name = ?", (scope_name,)).fetchone()
+            if deck:
+                deck_ids.append(deck['id'])
+        elif scope_type == 'folder':
+            folder = cur.execute("SELECT id FROM folders WHERE name = ?", (scope_name,)).fetchone()
+            if folder:
+                folder_ids.append(folder['id'])
+                
+        if not deck_ids and not folder_ids:
+            continue
+            
+        utc_dt = parse_input_datetime(parsed_date_str)
+        date_formatted = format_datetime_for_db(utc_dt)
+        
+        existing = cur.execute("SELECT id FROM exams WHERE name = ? AND date = ?", (name, date_formatted)).fetchone()
+        
+        if existing:
+            exam_id = existing['id']
+            if deck_ids:
+                for did in deck_ids:
+                    link = cur.execute("SELECT 1 FROM exam_decks WHERE exam_id = ? AND deck_id = ?", (exam_id, did)).fetchone()
+                    if not link:
+                        cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+            if folder_ids:
+                for fid in folder_ids:
+                    link = cur.execute("SELECT 1 FROM exam_folders WHERE exam_id = ? AND folder_id = ?", (exam_id, fid)).fetchone()
+                    if not link:
+                        cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+        else:
+            cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name, date_formatted))
+            exam_id = cur.lastrowid
+            
+            if deck_ids:
+                for did in deck_ids:
+                    cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+            if folder_ids:
+                for fid in folder_ids:
+                    cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+                    
+        conn.commit()
+        imported_count += 1
+        
+    conn.close()
+    
+    if imported_count > 0:
+        conn = get_db_connection()
+        unprocessed = conn.execute("SELECT id FROM exams WHERE processed = 0").fetchall()
+        for r in unprocessed:
+            conn.close()
+            distribute_exam_cards(r['id'])
+            conn = get_db_connection()
+        conn.close()
+        
+        send_discord_message(f"📋 批次匯入考試行程成功！共匯入 {imported_count} 筆考試。")
+        
+    return imported_count
+
+def init_db_schema():
+    conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            date TEXT NOT NULL,
+            processed INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exam_decks (
+            exam_id INTEGER NOT NULL,
+            deck_id INTEGER NOT NULL,
+            PRIMARY KEY (exam_id, deck_id),
+            FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+            FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exam_folders (
+            exam_id INTEGER NOT NULL,
+            folder_id INTEGER NOT NULL,
+            PRIMARY KEY (exam_id, folder_id),
+            FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db_schema()

@@ -23,5 +23,14 @@ class ImportForm(FlaskForm):
     csv_text = TextAreaField('CSV 內容', validators=[DataRequired(message="請輸入 CSV 內容")])
     decks = MultiCheckboxField('匯入至牌組', coerce=int, validators=[DataRequired(message="請至少選擇一個牌組")])
 
+class ExamForm(FlaskForm):
+    name = StringField('考試名稱', validators=[DataRequired(message="請輸入考試名稱")])
+    date = StringField('考試日期與時間', validators=[DataRequired(message="請選擇考試日期與時間")])
+    decks = MultiCheckboxField('關聯牌組', coerce=int)
+    folders = MultiCheckboxField('關聯資料夾', coerce=int)
+
+class ExamImportForm(FlaskForm):
+    csv_text = TextAreaField('CSV 內容', validators=[DataRequired(message="請輸入 CSV 內容")])
+
 class EmptyForm(FlaskForm):
     pass

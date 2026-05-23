@@ -1100,3 +1100,25 @@ a:hover {
         transform: translateY(0);
     }
 }
+
+/* Exam Schedule Styles */
+.expired-exam-card {
+    opacity: 0.75;
+    border-style: dashed !important;
+}
+.exam-summary-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary) !important;
+}
+.tab-btn:hover {
+    color: var(--primary) !important;
+}
+.tab-btn:focus {
+    outline: none;
+}
+.exams-cards-grid {
+    animation: slideIn 0.4s ease-out;
+}
+.folder-card {
+    animation: slideIn 0.3s ease-out;
+}

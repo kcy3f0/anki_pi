@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_wtf.csrf import CSRFProtect
 from config import Config
 import database as db
-from forms import FolderForm, DeckForm, CardForm, ImportForm, EmptyForm
+from forms import FolderForm, DeckForm, CardForm, ImportForm, EmptyForm, ExamForm, ExamImportForm
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -14,6 +14,7 @@ def inject_empty_form():
 
 @app.route('/')
 def index():
+    db.process_expired_exams()
     folders, unassigned_decks = db.get_folders_with_decks()
     folder_form = FolderForm()
     
@@ -22,12 +23,17 @@ def index():
     deck_form = DeckForm()
     deck_form.folders.choices = [(f['id'], f['name']) for f in folders_all]
     
+    # Fetch active exams
+    all_exams = db.get_all_exams()
+    upcoming_exams = [e for e in all_exams if not e['is_expired'] and e['processed'] == 0]
+    
     return render_template(
         'index.html',
         folders=folders,
         unassigned_decks=unassigned_decks,
         folder_form=folder_form,
-        deck_form=deck_form
+        deck_form=deck_form,
+        upcoming_exams=upcoming_exams
     )
 
 # Folders and Decks Routing
@@ -223,6 +229,7 @@ def study_folder(folder_id):
 
 @app.route('/study/api/cards')
 def get_study_cards_api():
+    db.process_expired_exams()
     mode_type = request.args.get('type')
     mode_id = request.args.get('id', type=int)
     
@@ -280,6 +287,80 @@ def clear_data():
         db.delete_all_app_data()
         flash('已清空所有記憶卡、牌組與資料夾資料！', 'danger')
     return redirect(url_for('index'))
+
+# Exam Routes
+
+@app.route('/exams')
+def exams_list():
+    db.process_expired_exams()
+    exams = db.get_all_exams()
+    
+    # Forms setup
+    folders = db.get_all_folders()
+    decks = db.get_all_decks()
+    
+    form = ExamForm()
+    form.decks.choices = [(d['id'], d['name']) for d in decks]
+    form.folders.choices = [(f['id'], f['name']) for f in folders]
+    
+    import_form = ExamImportForm()
+    
+    return render_template(
+        'exams.html',
+        exams=exams,
+        form=form,
+        import_form=import_form
+    )
+
+@app.route('/exams/add', methods=['POST'])
+def add_exam():
+    folders = db.get_all_folders()
+    decks = db.get_all_decks()
+    
+    form = ExamForm()
+    form.decks.choices = [(d['id'], d['name']) for d in decks]
+    form.folders.choices = [(f['id'], f['name']) for f in folders]
+    
+    if form.validate_on_submit():
+        if not form.decks.data and not form.folders.data:
+            flash('建立失敗：必須至少選擇一個牌組或資料夾作為考試範圍！', 'danger')
+            return redirect(url_for('exams_list'))
+            
+        db.create_exam(
+            form.name.data,
+            form.date.data,
+            form.decks.data,
+            form.folders.data
+        )
+        flash('考試行程建立成功，單字排程已自動調配！', 'success')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'建立失敗: {error}', 'danger')
+    return redirect(url_for('exams_list'))
+
+@app.route('/exams/import', methods=['POST'])
+def import_exams():
+    form = ExamImportForm()
+    if form.validate_on_submit():
+        imported = db.import_exams_csv(form.csv_text.data)
+        if imported > 0:
+            flash(f'成功匯入 {imported} 筆考試行程！相關單字排程已重新配置。', 'success')
+        else:
+            flash('匯入失敗：沒有可匯入的有效考試行程，請檢查格式或名稱是否正確。', 'danger')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'匯入失敗: {error}', 'danger')
+    return redirect(url_for('exams_list'))
+
+@app.route('/exams/delete/<int:exam_id>', methods=['POST'])
+def delete_exam(exam_id):
+    form = EmptyForm()
+    if form.validate_on_submit():
+        db.delete_exam(exam_id)
+        flash('考試行程已刪除！', 'warning')
+    return redirect(url_for('exams_list'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)

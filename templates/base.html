@@ -31,6 +31,9 @@
                 <a href="{{ url_for('index') }}" class="nav-link {% if request.path == '/' %}active{% endif %}">
                     <i class="fa-solid fa-layer-group"></i> 首頁
                 </a>
+                <a href="{{ url_for('exams_list') }}" class="nav-link {% if request.path.startswith('/exams') %}active{% endif %}">
+                    <i class="fa-solid fa-calendar-days"></i> 考試行程
+                </a>
                 <a href="{{ url_for('cards_list') }}" class="nav-link {% if request.path.startswith('/cards') %}active{% endif %}">
                     <i class="fa-solid fa-rectangle-list"></i> 卡片管理
                 </a>

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}考試行程 - 儀表板{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div class="dashboard-title">
+        <h1>考試行程管理</h1>
+        <p>在這裡管理您的考試日程與關聯的單字範圍，系統會自動在考試前重新調配 FSRS 複習間隔。</p>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Left Section: Exams List -->
+    <section class="dashboard-section folders-section">
+        <h2><i class="fa-solid fa-calendar-days text-folder"></i> 目前的考試行程</h2>
+        
+        {% if not exams %}
+            <div class="empty-state">
+                <i class="fa-regular fa-calendar-times" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 12px; display: block;"></i>
+                <p>目前沒有設定任何考試日程。請使用右側表單新增或匯入。</p>
+            </div>
+        {% else %}
+            <div class="folders-container">
+                {% for exam in exams %}
+                    <div class="folder-card {% if exam.is_expired %}expired-exam-card{% endif %}">
+                        <div class="folder-header">
+                            <div class="folder-title-wrapper">
+                                <i class="fa-solid fa-bell {% if exam.is_expired %}text-muted{% else %}text-folder{% endif %}"></i>
+                                <h3>{{ exam.name }}</h3>
+                            </div>
+                            <div class="folder-actions-wrapper">
+                                <form action="{{ url_for('delete_exam', exam_id=exam.id) }}" method="POST" class="inline-form" onsubmit="return confirm('確定要刪除這個考試行程嗎？此操作不會刪除單字，但單字排程將回復 FSRS 標準設定。');">
+                                    {{ empty_form.csrf_token }}
+                                    <button type="submit" class="btn btn-sm btn-icon btn-danger" title="刪除考試">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="folder-decks" style="padding: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                                <div>
+                                    <span class="badge {% if exam.is_expired %}badge-no-deck{% else %}badge-due{% endif %}">
+                                        <i class="fa-solid fa-clock"></i> {{ exam.countdown_str }}
+                                    </span>
+                                    <span class="badge badge-deck-name" style="margin-left: 6px;">
+                                        <i class="fa-regular fa-calendar"></i> {{ exam.date.replace('T', ' ')[:16] }}
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                                    準備進度：<strong>{{ exam.learned_cards }}</strong> / {{ exam.total_cards }} 單字 ({{ exam.progress_percent }}%)
+                                </div>
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div class="progress-bar-container" style="background-color: var(--bg-primary); border-radius: 9999px; height: 8px; overflow: hidden; margin-bottom: 16px;">
+                                <div class="progress-bar-fill" style="width: {{ exam.progress_percent }}%; background-color: var(--success); height: 100%; transition: width 0.3s ease;"></div>
+                            </div>
+
+                            <div style="margin-top: 8px;">
+                                <span style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">關聯範圍：</span>
+                                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                    {% for folder in exam.folders %}
+                                        <span class="badge badge-spell-type"><i class="fa-solid fa-folder"></i> {{ folder.name }}</span>
+                                    {% endfor %}
+                                    {% for deck in exam.decks %}
+                                        <span class="badge badge-recognize-type"><i class="fa-solid fa-layer-group"></i> {{ deck.name }}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Right Section: Management Forms -->
+    <section class="dashboard-section unassigned-section">
+        <h2><i class="fa-solid fa-gear"></i> 管理與新增</h2>
+        
+        <div class="form-container-card" style="max-width: 100%; padding: 24px;">
+            <!-- Tabs Navigation -->
+            <div class="tabs-nav" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; gap: 16px;">
+                <button class="tab-btn active" onclick="switchTab(event, 'manual-tab')" style="background: none; border: none; border-bottom: 2px solid var(--primary); padding: 8px 12px; font-weight: 600; cursor: pointer; color: var(--primary);">
+                    手動新增
+                </button>
+                <button class="tab-btn" onclick="switchTab(event, 'import-tab')" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 12px; font-weight: 500; cursor: pointer; color: var(--text-secondary);">
+                    批次匯入
+                </button>
+            </div>
+
+            <!-- Tab 1: Manual Form -->
+            <div id="manual-tab" class="tab-content active-content">
+                <form action="{{ url_for('add_exam') }}" method="POST">
+                    {{ form.csrf_token }}
+                    <div class="form-group">
+                        <label for="{{ form.name.id }}">{{ form.name.label }}</label>
+                        {{ form.name(class="form-control", placeholder="例如: 英文期中考, 多益檢定...") }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.date.id }}">{{ form.date.label }}</label>
+                        <input type="datetime-local" name="date" id="date" class="form-control" required>
+                        <div class="form-help-text">請設定您的考試時間，系統會以此時間為基準重新分配單字。</div>
+                    </div>
+                    <div class="form-group">
+                        <label>關聯牌組（可多選）</label>
+                        <div class="checkbox-list">
+                            {% for value, label in form.decks.choices %}
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="decks" value="{{ value }}"> {{ label }}
+                                </label>
+                            {% else %}
+                                <p class="text-muted" style="font-size: 0.85rem;">無牌組可選擇。</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>關聯資料夾（可多選）</label>
+                        <div class="checkbox-list">
+                            {% for value, label in form.folders.choices %}
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="folders" value="{{ value }}"> {{ label }}
+                                </label>
+                            {% else %}
+                                <p class="text-muted" style="font-size: 0.85rem;">無資料夾可選擇。</p>
+                            {% endfor %}
+                        </div>
+                        <div class="form-help-text">選擇資料夾會自動將該資料夾下的所有牌組納入考試範圍。</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" style="margin-top: 16px;">
+                        <i class="fa-solid fa-circle-check"></i> 建立考試並分配單字
+                    </button>
+                </form>
+            </div>
+
+            <!-- Tab 2: Import Form -->
+            <div id="import-tab" class="tab-content" style="display: none;">
+                <form action="{{ url_for('import_exams') }}" method="POST">
+                    {{ import_form.csrf_token }}
+                    <div class="form-group">
+                        <label for="{{ import_form.csv_text.id }}">{{ import_form.csv_text.label }}</label>
+                        {{ import_form.csv_text(class="form-control", rows="8", placeholder="考試名稱, 考試時間(YYYY-MM-DD HH:MM), 類型(deck/folder), 牌組或資料夾名稱") }}
+                        <div class="form-help-text">
+                            <strong>CSV 格式說明：</strong><br>
+                            每一行代表一筆考試日程，格式為：<br>
+                            <code>考試名稱, 考試時間, 類型(deck/folder), 牌組或資料夾名稱</code><br><br>
+                            <strong>範例：</strong><br>
+                            <code>英文期中考, 2026-06-01 09:00, deck, 必背單字</code><br>
+                            <code>多益聽力模擬, 2026-06-05 14:00, folder, TOEIC 資料夾</code>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" style="margin-top: 16px;">
+                        <i class="fa-solid fa-file-import"></i> 批次匯入並分配單字
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function switchTab(event, tabId) {
+        // Hide all tab contents
+        document.querySelectorAll('.tab-content').forEach(function(content) {
+            content.style.display = 'none';
+        });
+        // Show current tab content
+        document.getElementById(tabId).style.display = 'block';
+        
+        // Remove active class from all buttons
+        document.querySelectorAll('.tab-btn').forEach(function(btn) {
+            btn.style.borderBottomColor = 'transparent';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.fontWeight = '500';
+        });
+        
+        // Add active class to current button
+        event.currentTarget.style.borderBottomColor = 'var(--primary)';
+        event.currentTarget.style.color = 'var(--primary)';
+        event.currentTarget.style.fontWeight = '600';
+    }
+</script>
+{% endblock %}

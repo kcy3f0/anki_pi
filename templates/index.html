@@ -18,6 +18,57 @@
     </div>
 </div>
 
+{% if upcoming_exams %}
+<section class="upcoming-exams-section" style="margin-bottom: 32px;">
+    <h2 style="font-family: var(--font-display); font-size: 1.35rem; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+        <i class="fa-solid fa-clock" style="color: var(--danger);"></i> 即將到來的考試與準備進度
+    </h2>
+    <div class="exams-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px;">
+        {% for exam in upcoming_exams %}
+            <div class="exam-summary-card" style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-primary)); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 20px; transition: transform 0.2s ease, border-color 0.2s ease; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;">
+                <!-- Decorative Top Border for premium look -->
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary), var(--accent));"></div>
+                
+                <div class="exam-summary-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px;">
+                    <div>
+                        <span class="badge badge-due" style="margin-bottom: 6px;"><i class="fa-solid fa-graduation-cap"></i> 考試</span>
+                        <h3 style="font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; margin-top: 4px;">{{ exam.name }}</h3>
+                    </div>
+                    <span class="badge" style="background-color: var(--danger-light); color: var(--danger-dark); font-weight: 700; font-size: 0.85rem; padding: 6px 12px;">
+                        <i class="fa-solid fa-hourglass-half"></i> {{ exam.countdown_str }}
+                    </span>
+                </div>
+                
+                <div class="exam-summary-body" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; margin-top: 8px;">
+                    <div style="font-size: 0.9rem; color: var(--text-secondary); display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span><i class="fa-regular fa-calendar"></i> {{ exam.date.replace('T', ' ')[:16] }}</span>
+                        <span>已背：<strong>{{ exam.learned_cards }}</strong> / {{ exam.total_cards }}</span>
+                    </div>
+                    
+                    <div class="progress-bar-container" style="background-color: var(--border-color); border-radius: 9999px; height: 8px; overflow: hidden; margin-bottom: 16px;">
+                        <div class="progress-bar-fill" style="width: {{ exam.progress_percent }}%; background: linear-gradient(90deg, var(--success), #34d399); height: 100%; transition: width 0.3s ease;"></div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 70%;">
+                            {% for folder in exam.folders %}
+                                <span class="badge badge-spell-type" style="font-size: 0.75rem; padding: 2px 6px;"><i class="fa-solid fa-folder"></i> {{ folder.name }}</span>
+                            {% endfor %}
+                            {% for deck in exam.decks %}
+                                <span class="badge badge-recognize-type" style="font-size: 0.75rem; padding: 2px 6px;"><i class="fa-solid fa-layer-group"></i> {{ deck.name }}</span>
+                            {% endfor %}
+                        </div>
+                        <a href="{{ url_for('exams_list') }}" class="btn btn-xs btn-outline-primary" style="padding: 4px 10px; border-radius: 4px; font-weight: 600;">
+                            準備 <i class="fa-solid fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 <div class="dashboard-grid">
     <!-- Folders Section -->
     <section class="dashboard-section folders-section">

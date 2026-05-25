@@ -220,7 +220,7 @@ def import_csv():
     form.decks.choices = [(d['id'], d['name']) for d in decks_all]
     
     if form.validate_on_submit():
-        imported, merged = db.import_csv_data(form.csv_text.data, form.decks.data)
+        imported, merged = db.import_csv_data(form.csv_text.data, form.decks.data, form.card_type.data)
         flash(f'匯入完成！新增: {imported} 筆，合併重複: {merged} 筆。', 'success')
     else:
         for field, errors in form.errors.items():

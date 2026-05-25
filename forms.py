@@ -21,6 +21,7 @@ class CardForm(FlaskForm):
 
 class ImportForm(FlaskForm):
     csv_text = TextAreaField('CSV 內容', validators=[DataRequired(message="請輸入 CSV 內容")])
+    card_type = SelectField('卡片類型', choices=[('recognize', '只要認得 (recognize)'), ('spell', '需要會拼 (spell)')], validators=[DataRequired()])
     decks = MultiCheckboxField('匯入至牌組', coerce=int, validators=[DataRequired(message="請至少選擇一個牌組")])
 
 class ExamForm(FlaskForm):

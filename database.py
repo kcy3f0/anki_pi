@@ -337,7 +337,7 @@ def delete_card(card_id):
 
 # Batch CSV Import
 
-def import_csv_data(csv_text, deck_ids):
+def import_csv_data(csv_text, deck_ids, card_type="recognize"):
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -347,14 +347,14 @@ def import_csv_data(csv_text, deck_ids):
     
     now_str = format_datetime_for_db(datetime.now(timezone.utc))
     
+    if card_type not in ["recognize", "spell"]:
+        card_type = "recognize"
+    
     for row in reader:
         if not row or len(row) < 2:
             continue
         front = row[0].strip()
         back = row[1].strip()
-        card_type = row[2].strip() if len(row) > 2 else "recognize"
-        if card_type not in ["recognize", "spell"]:
-            card_type = "recognize"
             
         if not front or not back:
             continue

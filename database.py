@@ -215,10 +215,10 @@ def get_all_cards_paged(search="", page=1, limit=50, deck_id=None):
             query += " AND (c.front LIKE ? OR c.back LIKE ?)"
             params.extend([f"%{search}%", f"%{search}%"])
     else:
-        query = "SELECT * FROM cards"
+        query = "SELECT c.* FROM cards c"
         params = []
         if search:
-            query += " WHERE front LIKE ? OR back LIKE ?"
+            query += " WHERE c.front LIKE ? OR c.back LIKE ?"
             params.extend([f"%{search}%", f"%{search}%"])
         
     query += " ORDER BY c.id DESC LIMIT ? OFFSET ?"

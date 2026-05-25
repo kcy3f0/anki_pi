@@ -1122,3 +1122,334 @@ a:hover {
 .folder-card {
     animation: slideIn 0.3s ease-out;
 }
+
+/* ==========================================================================
+   Mobile Bottom Navigation (Hidden by default on Desktop)
+   ========================================================================== */
+.mobile-nav {
+    display: none;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+
+/* Tablets & Mobile Devices (768px and down) */
+@media (max-width: 768px) {
+    :root {
+        --header-height: 60px;
+    }
+    
+    /* Global Layout Adjustments */
+    .app-content {
+        padding: 20px 16px 100px 16px !important; /* Extra bottom padding for mobile nav */
+    }
+    
+    /* Header adjustments */
+    .app-header {
+        height: var(--header-height);
+        box-shadow: var(--shadow-sm);
+    }
+    .header-container {
+        padding: 0 16px;
+    }
+    .app-logo {
+        font-size: 1.2rem;
+    }
+    .app-logo i {
+        font-size: 1.35rem;
+    }
+    
+    /* Hide desktop navigation */
+    .app-nav {
+        display: none !important;
+    }
+    
+    /* Mobile Bottom Navigation Bar (Premium Glassmorphism) */
+    .mobile-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background-color: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid var(--border-color);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+        z-index: 999;
+        justify-content: space-around;
+        align-items: center;
+        padding-bottom: env(safe-area-inset-bottom); /* Support for iPhone notch/home bar */
+    }
+    
+    .dark-mode .mobile-nav {
+        background-color: rgba(18, 24, 36, 0.85);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    }
+    
+    .mobile-nav-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 500;
+        gap: 3px;
+        flex: 1;
+        height: 100%;
+        transition: all 0.2s ease;
+        padding-top: 4px;
+    }
+    
+    .mobile-nav-link i {
+        font-size: 1.25rem;
+        transition: transform 0.2s ease;
+    }
+    
+    .mobile-nav-link:hover {
+        color: var(--text-primary);
+    }
+    
+    .mobile-nav-link:active i {
+        transform: scale(0.9);
+    }
+    
+    .mobile-nav-link.active {
+        color: var(--primary);
+        font-weight: 600;
+    }
+    
+    /* Dashboard Home RWD */
+    .dashboard-header {
+        margin-bottom: 24px;
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+        gap: 12px;
+    }
+    .dashboard-title h1 {
+        font-size: 1.6rem;
+    }
+    .dashboard-actions {
+        display: flex;
+        gap: 10px;
+        width: 100%;
+    }
+    .dashboard-actions .btn {
+        flex: 1;
+        padding: 10px;
+        font-size: 0.88rem;
+    }
+    
+    /* Folder & Decks layout on mobile */
+    .folder-card {
+        margin-bottom: 16px;
+    }
+    .folder-header {
+        padding: 12px 16px;
+    }
+    .folder-decks {
+        padding: 12px 16px;
+    }
+    .deck-item {
+        padding: 10px 12px;
+    }
+    
+    /* Responsive Table to Cards layout (Premium CSS Transform) */
+    .table-container {
+        border: none;
+        box-shadow: none;
+        background-color: transparent;
+        margin-top: 16px;
+    }
+    
+    .data-table, 
+    .data-table thead, 
+    .data-table tbody, 
+    .data-table th, 
+    .data-table td, 
+    .data-table tr {
+        display: block;
+    }
+    
+    .data-table thead {
+        display: none; /* Hide column headers */
+    }
+    
+    .data-table tr {
+        border: 1px solid var(--border-color);
+        margin-bottom: 16px;
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        background-color: var(--bg-secondary);
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    
+    .data-table tr:hover {
+        border-color: var(--primary);
+    }
+    
+    .data-table td {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        padding: 10px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+        text-align: right;
+    }
+    
+    .dark-mode .data-table td {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    
+    .data-table td:last-child {
+        border-bottom: none;
+        padding-top: 12px;
+        justify-content: flex-end;
+    }
+    
+    /* Generate dynamic mobile labels using nth-child pseudo selectors */
+    .data-table td:nth-of-type(1):before { content: "正面 (英文)"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(2):before { content: "背面 (中文)"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(3):before { content: "類型"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(4):before { content: "所屬牌組"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(5):before { content: "下次複習"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(6):before { content: "複習進度"; font-weight: 600; color: var(--text-secondary); }
+    .data-table td:nth-of-type(7):before { content: "操作"; font-weight: 600; color: var(--text-secondary); }
+    
+    .data-table td:before {
+        float: left;
+        text-align: left;
+        margin-right: 15px;
+    }
+    
+    /* Card list search container */
+    .search-form {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .search-form .btn {
+        width: 100%;
+    }
+    
+    /* Footer adjustments */
+    .app-footer {
+        padding: 16px 16px 80px 16px; /* Extra bottom space for footer */
+    }
+}
+
+/* Small Screens & Mobile Phones (576px and down) */
+@media (max-width: 576px) {
+    /* Hide text inside deck action buttons on mobile, keeping only icons for cleaner design */
+    .deck-actions .btn {
+        font-size: 0 !important;
+        padding: 6px 8px !important;
+    }
+    .deck-actions .btn i {
+        font-size: 0.9rem !important;
+        margin-right: 0 !important;
+    }
+    
+    /* Study Page Improvements */
+    .study-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        text-align: center;
+        margin-bottom: 16px;
+    }
+    .study-header-left {
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+    }
+    .study-header-left h2 {
+        font-size: 1.15rem;
+    }
+    .study-progress-wrapper {
+        justify-content: center;
+        gap: 8px;
+    }
+    .progress-label {
+        font-size: 0.8rem;
+        padding: 4px 8px;
+    }
+    
+    /* Study Card Area */
+    .study-card-container {
+        margin-bottom: 16px;
+    }
+    .flip-card {
+        height: 290px !important;
+    }
+    .flip-card-front, .flip-card-back {
+        padding: 20px !important;
+    }
+    .card-word {
+        font-size: 1.85rem !important;
+    }
+    .back-text-container {
+        font-size: 1.1rem !important;
+        max-height: 150px !important;
+    }
+    
+    /* Interaction Panel */
+    .study-interaction-panel {
+        padding: 16px !important;
+        min-height: 90px !important;
+    }
+    .btn-rating {
+        padding: 10px 4px !important;
+    }
+    .rating-num {
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 0.7rem !important;
+    }
+    .rating-text {
+        font-size: 0.72rem !important;
+    }
+    
+    /* Spell mode input for mobile */
+    .spell-input-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .spell-text-field {
+        font-size: 1rem;
+        padding: 8px 12px;
+    }
+    .spell-result-alert {
+        font-size: 0.9rem;
+    }
+    
+    /* Modals dynamic adaptation */
+    .modal-content {
+        width: 92% !important;
+        max-height: 85vh;
+    }
+    .modal-body {
+        padding: 16px 20px !important;
+    }
+    .modal-footer {
+        padding: 12px 20px !important;
+    }
+    
+    /* Form modifications on mobile */
+    .form-container-card {
+        padding: 16px !important;
+    }
+    
+    /* Force 1-column layouts for inline elements */
+    .exams-cards-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .exam-summary-card {
+        padding: 16px !important;
+    }
+}

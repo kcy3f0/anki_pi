@@ -83,6 +83,26 @@
         </div>
     </footer>
 
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-nav">
+        <a href="{{ url_for('index') }}" class="mobile-nav-link {% if request.path == '/' %}active{% endif %}">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>首頁</span>
+        </a>
+        <a href="{{ url_for('exams_list') }}" class="mobile-nav-link {% if request.path.startswith('/exams') %}active{% endif %}">
+            <i class="fa-solid fa-calendar-days"></i>
+            <span>考試</span>
+        </a>
+        <a href="{{ url_for('cards_list') }}" class="mobile-nav-link {% if request.path.startswith('/cards') %}active{% endif %}">
+            <i class="fa-solid fa-rectangle-list"></i>
+            <span>卡片</span>
+        </a>
+        <a href="{{ url_for('settings') }}" class="mobile-nav-link {% if request.path.startswith('/settings') %}active{% endif %}">
+            <i class="fa-solid fa-sliders"></i>
+            <span>設定</span>
+        </a>
+    </nav>
+
     <!-- Global Javascript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}

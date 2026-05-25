@@ -1234,13 +1234,15 @@ a:hover {
     }
     .dashboard-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
         width: 100%;
     }
     .dashboard-actions .btn {
-        flex: 1;
+        flex: 1 1 calc(50% - 5px);
         padding: 10px;
         font-size: 0.88rem;
+        white-space: nowrap;
     }
     
     /* Folder & Decks layout on mobile */

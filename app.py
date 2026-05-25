@@ -23,6 +23,16 @@ def index():
     deck_form = DeckForm()
     deck_form.folders.choices = [(f['id'], f['name']) for f in folders_all]
     
+    # Fetch all decks for card and import form choices
+    decks_all = db.get_all_decks()
+    
+    # Setup Card Forms
+    card_form = CardForm()
+    card_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+    
+    import_form = ImportForm()
+    import_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+    
     # Fetch active exams
     all_exams = db.get_all_exams()
     upcoming_exams = [e for e in all_exams if not e['is_expired'] and e['processed'] == 0]
@@ -33,6 +43,8 @@ def index():
         unassigned_decks=unassigned_decks,
         folder_form=folder_form,
         deck_form=deck_form,
+        card_form=card_form,
+        import_form=import_form,
         upcoming_exams=upcoming_exams
     )
 
@@ -167,7 +179,7 @@ def add_card():
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'建立失敗: {error}', 'danger')
-    return redirect(url_for('cards_list'))
+    return redirect(request.referrer or url_for('cards_list'))
 
 @app.route('/cards/edit/<int:card_id>', methods=['GET', 'POST'])
 def edit_card(card_id):
@@ -214,7 +226,7 @@ def import_csv():
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'匯入失敗: {error}', 'danger')
-    return redirect(url_for('cards_list'))
+    return redirect(request.referrer or url_for('cards_list'))
 
 # Study Routing
 

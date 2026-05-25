@@ -15,6 +15,12 @@
         <button class="btn btn-secondary" onclick="openModal('add-deck-modal')">
             <i class="fa-solid fa-plus"></i> 新建牌組
         </button>
+        <button class="btn btn-primary" onclick="openModal('add-card-modal')">
+            <i class="fa-solid fa-plus"></i> 新建卡片
+        </button>
+        <button class="btn btn-success" onclick="openModal('import-cards-modal')">
+            <i class="fa-solid fa-file-import"></i> 貼上內容匯入
+        </button>
     </div>
 </div>
 
@@ -240,6 +246,85 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeModal('add-deck-modal')">取消</button>
                 <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Add Card -->
+<div id="add-card-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-plus"></i> 新建卡片</h3>
+            <span class="close-btn" onclick="closeModal('add-card-modal')">&times;</span>
+        </div>
+        <form action="{{ url_for('add_card') }}" method="POST">
+            <div class="modal-body">
+                {{ card_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ card_form.front.id }}">{{ card_form.front.label }}</label>
+                    {{ card_form.front(class="form-control", placeholder="例如: Apple, accomplish...") }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ card_form.back.id }}">{{ card_form.back.label }}</label>
+                    {{ card_form.back(class="form-control", rows="3", placeholder="例如: n. 蘋果") }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ card_form.card_type.id }}">{{ card_form.card_type.label }}</label>
+                    {{ card_form.card_type(class="form-control") }}
+                </div>
+                <div class="form-group">
+                    <label>{{ card_form.decks.label }}</label>
+                    <div class="checkbox-list">
+                        {% for value, label in card_form.decks.choices %}
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="decks" value="{{ value }}"> {{ label }}
+                            </label>
+                        {% else %}
+                            <p class="text-danger">請先建立牌組，才能建立卡片。</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-card-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Import Cards -->
+<div id="import-cards-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-file-import"></i> 貼上內容匯入 (CSV 格式)</h3>
+            <span class="close-btn" onclick="closeModal('import-cards-modal')">&times;</span>
+        </div>
+        <form action="{{ url_for('import_csv') }}" method="POST">
+            <div class="modal-body">
+                {{ import_form.csrf_token }}
+                <div class="form-group">
+                    <label for="{{ import_form.csv_text.id }}">{{ import_form.csv_text.label }}</label>
+                    {{ import_form.csv_text(class="form-control", rows="8", placeholder="格式: 英文,中文[,類型(recognize/spell)]\n例如:\napple,蘋果\nbanana,香蕉,spell\ncat,貓,recognize") }}
+                    <p class="form-help-text">提示：若匯入的單字（正面英文）已存在於資料庫，系統會自動合併釋義，將新中文寫在舊中文之後。</p>
+                </div>
+                <div class="form-group">
+                    <label>{{ import_form.decks.label }}</label>
+                    <div class="checkbox-list">
+                        {% for value, label in import_form.decks.choices %}
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="decks" value="{{ value }}"> {{ label }}
+                            </label>
+                        {% else %}
+                            <p class="text-danger">請先建立牌組，才能匯入卡片。</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('import-cards-modal')">取消</button>
+                <button type="submit" class="btn btn-primary">匯入</button>
             </div>
         </form>
     </div>

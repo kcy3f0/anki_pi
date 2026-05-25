@@ -118,6 +118,9 @@
                                                 <a href="{{ url_for('study_deck', deck_id=deck.id) }}" class="btn btn-xs btn-outline-primary">
                                                     <i class="fa-solid fa-graduation-cap"></i> 學習
                                                 </a>
+                                                <a href="{{ url_for('cards_list', deck_id=deck.id) }}" class="btn btn-xs btn-outline-secondary" title="瀏覽牌組內容">
+                                                    <i class="fa-solid fa-eye"></i> 瀏覽
+                                                </a>
                                                 <a href="{{ url_for('edit_deck', deck_id=deck.id) }}" class="btn btn-xs btn-icon btn-outline-secondary" title="編輯牌組">
                                                     <i class="fa-solid fa-pen"></i>
                                                 </a>
@@ -162,6 +165,9 @@
                             <div class="deck-actions">
                                 <a href="{{ url_for('study_deck', deck_id=deck.id) }}" class="btn btn-xs btn-outline-primary">
                                     <i class="fa-solid fa-graduation-cap"></i> 學習
+                                </a>
+                                <a href="{{ url_for('cards_list', deck_id=deck.id) }}" class="btn btn-xs btn-outline-secondary" title="瀏覽牌組內容">
+                                    <i class="fa-solid fa-eye"></i> 瀏覽
                                 </a>
                                 <a href="{{ url_for('edit_deck', deck_id=deck.id) }}" class="btn btn-xs btn-icon btn-outline-secondary" title="編輯牌組">
                                     <i class="fa-solid fa-pen"></i>

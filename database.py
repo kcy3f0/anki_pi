@@ -204,27 +204,42 @@ def get_deck_folders(deck_id):
 
 # Card Management
 
-def get_all_cards_paged(search="", page=1, limit=50):
+def get_all_cards_paged(search="", page=1, limit=50, deck_id=None):
     conn = get_db_connection()
     offset = (page - 1) * limit
     
-    query = "SELECT * FROM cards"
-    params = []
-    if search:
-        query += " WHERE front LIKE ? OR back LIKE ?"
-        params.extend([f"%{search}%", f"%{search}%"])
+    if deck_id:
+        query = "SELECT c.* FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
+        params = [deck_id]
+        if search:
+            query += " AND (c.front LIKE ? OR c.back LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%"])
+    else:
+        query = "SELECT * FROM cards"
+        params = []
+        if search:
+            query += " WHERE front LIKE ? OR back LIKE ?"
+            params.extend([f"%{search}%", f"%{search}%"])
         
-    query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY c.id DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     
     cards = conn.execute(query, params).fetchall()
     
     # Total count
-    count_query = "SELECT COUNT(*) FROM cards"
-    count_params = []
-    if search:
-        count_query += " WHERE front LIKE ? OR back LIKE ?"
-        count_params.extend([f"%{search}%", f"%{search}%"])
+    if deck_id:
+        count_query = "SELECT COUNT(*) FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
+        count_params = [deck_id]
+        if search:
+            count_query += " AND (c.front LIKE ? OR c.back LIKE ?)"
+            count_params.extend([f"%{search}%", f"%{search}%"])
+    else:
+        count_query = "SELECT COUNT(*) FROM cards"
+        count_params = []
+        if search:
+            count_query += " WHERE front LIKE ? OR back LIKE ?"
+            count_params.extend([f"%{search}%", f"%{search}%"])
+            
     total = conn.execute(count_query, count_params).fetchone()[0]
     
     # Get deck mapping for each card

@@ -113,17 +113,28 @@ def delete_deck(deck_id):
 def cards_list():
     search = request.args.get('search', '')
     page = request.args.get('page', 1, type=int)
+    deck_id = request.args.get('deck_id', None, type=int)
     limit = 20
     
-    cards, total = db.get_all_cards_paged(search, page, limit)
+    current_deck = None
+    if deck_id:
+        conn = db.get_db_connection()
+        current_deck = conn.execute("SELECT * FROM decks WHERE id = ?", (deck_id,)).fetchone()
+        conn.close()
+    
+    cards, total = db.get_all_cards_paged(search, page, limit, deck_id)
     
     # Setup Forms
     card_form = CardForm()
     decks_all = db.get_all_decks()
     card_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+    if deck_id:
+        card_form.decks.data = [deck_id]
     
     import_form = ImportForm()
     import_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+    if deck_id:
+        import_form.decks.data = [deck_id]
     
     total_pages = (total + limit - 1) // limit
     
@@ -135,7 +146,9 @@ def cards_list():
         total_pages=total_pages,
         total=total,
         card_form=card_form,
-        import_form=import_form
+        import_form=import_form,
+        deck_id=deck_id,
+        current_deck=current_deck
     )
 
 @app.route('/cards/add', methods=['POST'])

@@ -239,25 +239,24 @@
             if (spellShownSide === 'back') {
                 // Show back initially (flip it!)
                 flipCard.classList.add('flipped');
-                spellPanel.classList.remove('hidden');
-                spellInput.focus();
-            } else {
-                // Show front initially
-                showAnswerPanel.classList.remove('hidden');
             }
         } else {
             // Recognize mode: always show front first
-            showAnswerPanel.classList.remove('hidden');
-
+            spellShownSide = 'front';
         }
+
+        // Always show "Show Answer" panel initially
+        showAnswerPanel.classList.remove('hidden');
     }
 
     function showAnswer() {
-        flipCard.classList.add('flipped');
+        if (spellShownSide === 'back') {
+            flipCard.classList.remove('flipped');
+        } else {
+            flipCard.classList.add('flipped');
+        }
         showAnswerPanel.classList.add('hidden');
         ratingPanel.classList.remove('hidden');
-        
-
     }
 
     function handleSpellingSubmit() {

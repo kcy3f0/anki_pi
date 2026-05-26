@@ -1,14 +1,17 @@
 import sqlite3
 import os
 import csv
+import math
+import random
 from datetime import datetime, timezone, timedelta
 import requests
 from fsrs import Scheduler, Card, Rating, State
 from config import Config
 
 def get_db_connection():
-    conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn = sqlite3.connect(Config.DATABASE_PATH, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -393,19 +396,59 @@ def import_csv_data(csv_text, deck_ids, card_type="recognize"):
 
 # Spaced Repetition (FSRS) Study
 
+def _get_earliest_exam_date(conn, deck_id, folder_id, now):
+    """Find the earliest upcoming exam date for a given deck or folder scope."""
+    now_str = format_datetime_for_db(now)
+
+    if deck_id:
+        row = conn.execute("""
+            SELECT MIN(e.date) as min_date FROM exams e
+            WHERE e.date > ? AND e.processed = 0
+            AND (
+                e.id IN (SELECT exam_id FROM exam_decks WHERE deck_id = ?)
+                OR e.id IN (
+                    SELECT exam_id FROM exam_folders WHERE folder_id IN (
+                        SELECT folder_id FROM deck_folders WHERE deck_id = ?
+                    )
+                )
+            )
+        """, (now_str, deck_id, deck_id)).fetchone()
+    elif folder_id:
+        row = conn.execute("""
+            SELECT MIN(e.date) as min_date FROM exams e
+            WHERE e.date > ? AND e.processed = 0
+            AND (
+                e.id IN (
+                    SELECT exam_id FROM exam_decks WHERE deck_id IN (
+                        SELECT deck_id FROM deck_folders WHERE folder_id = ?
+                    )
+                )
+                OR e.id IN (SELECT exam_id FROM exam_folders WHERE folder_id = ?)
+            )
+        """, (now_str, folder_id, folder_id)).fetchone()
+    else:
+        return None
+
+    if row and row['min_date']:
+        return parse_db_datetime(row['min_date'])
+    return None
+
 def get_study_cards(deck_id=None, folder_id=None):
     """
-    Get all cards that are new (reps = 0) or due (next_review <= now) for a deck or a folder.
+    Get cards for today's study session.
+    - due_cards: FSRS scheduled reviews (next_review <= now)
+    - new_cards: unseen cards (reps = 0), dynamically limited by exam schedule
+      If an exam exists, new cards are capped so all are seen 7 days before exam.
     """
     conn = get_db_connection()
     now = datetime.now(timezone.utc)
-    
+
     query = """
         SELECT DISTINCT c.* FROM cards c
         JOIN card_decks cd ON c.id = cd.card_id
     """
     params = []
-    
+
     if deck_id:
         query += " WHERE cd.deck_id = ?"
         params.append(deck_id)
@@ -415,24 +458,45 @@ def get_study_cards(deck_id=None, folder_id=None):
             WHERE df.folder_id = ?
         """
         params.append(folder_id)
-        
+
     rows = conn.execute(query, params).fetchall()
+
+    # Query exam date before closing connection
+    earliest_exam_date = _get_earliest_exam_date(conn, deck_id, folder_id, now)
     conn.close()
-    
+
     new_cards = []
     due_cards = []
-    
+
     for r in rows:
         c_dict = dict(r)
         reps = r['reps'] or 0
         next_review_str = r['next_review']
         next_review = parse_db_datetime(next_review_str)
-        
+
         if reps == 0:
             new_cards.append(c_dict)
         elif next_review and next_review <= now:
             due_cards.append(c_dict)
-            
+
+    # Dynamically limit new cards based on exam schedule
+    if earliest_exam_date and new_cards:
+        total_days = (earliest_exam_date.date() - now.date()).days
+        if total_days > 0:
+            cutoff_date = earliest_exam_date - timedelta(days=7)
+            days_to_cutoff = (cutoff_date.date() - now.date()).days
+
+            if days_to_cutoff > 0:
+                # Before cutoff: distribute new cards across days until cutoff
+                days_for_new = days_to_cutoff
+            else:
+                # Past cutoff: distribute across all remaining days before exam
+                days_for_new = max(1, total_days)
+
+            today_new_count = math.ceil(len(new_cards) / days_for_new)
+            random.shuffle(new_cards)
+            new_cards = new_cards[:today_new_count]
+
     return new_cards, due_cards
 
 def submit_card_review(card_id, rating_val):
@@ -616,20 +680,19 @@ def parse_input_datetime(date_str):
     return local_dt.astimezone(timezone.utc)
 
 def distribute_exam_cards(exam_id):
-    import random
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     exam = cur.execute("SELECT date FROM exams WHERE id = ?", (exam_id,)).fetchone()
     if not exam:
         conn.close()
         return
-        
+
     exam_date = parse_db_datetime(exam['date'])
     if not exam_date:
         conn.close()
         return
-        
+
     # Get all cards in scope
     rows = cur.execute("""
         SELECT id, reps, next_review FROM cards
@@ -644,47 +707,72 @@ def distribute_exam_cards(exam_id):
             )
         )
     """, (exam_id, exam_id)).fetchall()
-    
+
     now = datetime.now(timezone.utc)
-    
-    # Filter cards: reps = 0 or next_review > exam_date
-    filtered_card_ids = []
-    for r in rows:
-        reps = r['reps'] or 0
-        next_review_str = r['next_review']
-        next_review = parse_db_datetime(next_review_str)
-        
-        if reps == 0 or (next_review and next_review > exam_date):
-            filtered_card_ids.append(r['id'])
-            
-    if not filtered_card_ids:
+    total_days = (exam_date.date() - now.date()).days
+
+    if total_days <= 0:
         conn.close()
         return
-        
-    # Shuffle card list for even mixed distribution
-    random.shuffle(filtered_card_ids)
-    
-    # Calculate days remaining (today to day before exam)
-    target_days = (exam_date.date() - now.date()).days
-    slots = max(1, target_days)
-    
-    for i, card_id in enumerate(filtered_card_ids):
-        day_offset = i % slots
-        if (exam_date - now).total_seconds() <= 0:
-            scheduled_dt = now
-        else:
-            # We want to schedule it at the current time on the target day.
-            # Add a small random jitter (e.g. 0-60 minutes) to avoid exact same timestamp.
+
+    # Separate new cards (reps=0) from reviewed-but-late cards (next_review > exam_date)
+    new_card_ids = []
+    late_card_ids = []
+
+    for r in rows:
+        reps = r['reps'] or 0
+        next_review = parse_db_datetime(r['next_review'])
+
+        if reps == 0:
+            new_card_ids.append(r['id'])
+        elif next_review and next_review > exam_date:
+            late_card_ids.append(r['id'])
+
+    if not new_card_ids and not late_card_ids:
+        conn.close()
+        return
+
+    # Calculate days_for_new: all new cards must be seen 7 days before exam
+    cutoff_date = exam_date - timedelta(days=7)
+    days_to_cutoff = (cutoff_date.date() - now.date()).days
+
+    if days_to_cutoff > 0:
+        days_for_new = days_to_cutoff
+    else:
+        # Already past cutoff, distribute across all remaining days
+        days_for_new = max(1, total_days)
+
+    # Distribute new cards across the pre-cutoff window only
+    if new_card_ids:
+        random.shuffle(new_card_ids)
+        for i, card_id in enumerate(new_card_ids):
+            day_offset = i % days_for_new
             jitter_minutes = random.randint(0, 60)
             scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
-            
-            # Capping it to make sure it's not past the exam date
+
+            # Cap to cutoff or exam date
+            cap_date = cutoff_date if days_to_cutoff > 0 else exam_date
+            if scheduled_dt >= cap_date:
+                scheduled_dt = cap_date - timedelta(minutes=1)
+
+            scheduled_str = format_datetime_for_db(scheduled_dt)
+            cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
+
+    # Distribute late-reviewed cards across all remaining days before exam
+    if late_card_ids:
+        random.shuffle(late_card_ids)
+        slots = max(1, total_days)
+        for i, card_id in enumerate(late_card_ids):
+            day_offset = i % slots
+            jitter_minutes = random.randint(0, 60)
+            scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
+
             if scheduled_dt >= exam_date:
                 scheduled_dt = exam_date - timedelta(minutes=1)
-                
-        scheduled_str = format_datetime_for_db(scheduled_dt)
-        cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
-        
+
+            scheduled_str = format_datetime_for_db(scheduled_dt)
+            cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
+
     conn.commit()
     conn.close()
 
@@ -933,8 +1021,9 @@ def import_exams_csv(csv_text):
     return imported_count
 
 def init_db_schema():
-    conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn = sqlite3.connect(Config.DATABASE_PATH, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS exams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -330,6 +330,13 @@
         // Show Answer Button
         btnShowAnswer.addEventListener('click', showAnswer);
 
+        // Click Card to show answer
+        flipCard.addEventListener('click', () => {
+            if (!showAnswerPanel.classList.contains('hidden')) {
+                showAnswer();
+            }
+        });
+
         // Spell submit
         spellSubmitBtn.addEventListener('click', handleSpellingSubmit);
         spellInput.addEventListener('keydown', (e) => {

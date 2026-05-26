@@ -45,7 +45,7 @@
                                         <i class="fa-solid fa-clock"></i> {{ exam.countdown_str }}
                                     </span>
                                     <span class="badge badge-deck-name" style="margin-left: 6px;">
-                                        <i class="fa-regular fa-calendar"></i> {{ exam.date.replace('T', ' ')[:16] }}
+                                        <i class="fa-regular fa-calendar"></i> {{ exam.date.replace('T', ' ')[:10] }}
                                     </span>
                                 </div>
                                 <div style="font-size: 0.9rem; color: var(--text-secondary);">
@@ -101,8 +101,8 @@
                     </div>
                     <div class="form-group">
                         <label for="{{ form.date.id }}">{{ form.date.label }}</label>
-                        <input type="datetime-local" name="date" id="date" class="form-control" required>
-                        <div class="form-help-text">請設定您的考試時間，系統會以此時間為基準重新分配單字。</div>
+                        <input type="date" name="date" id="date" class="form-control" required>
+                        <div class="form-help-text">請設定您的考試日期，時間將一律設在該天的凌晨 00:00。</div>
                     </div>
                     <div class="form-group">
                         <label>關聯牌組（可多選）</label>
@@ -141,14 +141,14 @@
                     {{ import_form.csrf_token }}
                     <div class="form-group">
                         <label for="{{ import_form.csv_text.id }}">{{ import_form.csv_text.label }}</label>
-                        {{ import_form.csv_text(class="form-control", rows="8", placeholder="考試名稱, 考試時間(YYYY-MM-DD HH:MM), 類型(deck/folder), 牌組或資料夾名稱") }}
+                        {{ import_form.csv_text(class="form-control", rows="8", placeholder="考試名稱, 考試日期(YYYY-MM-DD), 類型(deck/folder), 牌組或資料夾名稱") }}
                         <div class="form-help-text">
                             <strong>CSV 格式說明：</strong><br>
                             每一行代表一筆考試日程，格式為：<br>
-                            <code>考試名稱, 考試時間, 類型(deck/folder), 牌組或資料夾名稱</code><br><br>
+                            <code>考試名稱, 考試日期, 類型(deck/folder), 牌組或資料夾名稱</code><br><br>
                             <strong>範例：</strong><br>
-                            <code>英文期中考, 2026-06-01 09:00, deck, 必背單字</code><br>
-                            <code>多益聽力模擬, 2026-06-05 14:00, folder, TOEIC 資料夾</code>
+                            <code>英文期中考, 2026-06-01, deck, 必背單字</code><br>
+                            <code>多益聽力模擬, 2026-06-05, folder, TOEIC 資料夾</code>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary btn-block" style="margin-top: 16px;">

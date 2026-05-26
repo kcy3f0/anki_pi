@@ -33,7 +33,9 @@ def test_exam_scheduling():
     
     try:
         # 2. Create first exam (in 5 days)
-        exam_1_date = now + timedelta(days=5)
+        local_now = now.astimezone()
+        exam_1_date_local = (local_now + timedelta(days=5)).replace(hour=0, minute=0, second=0, microsecond=0)
+        exam_1_date = exam_1_date_local.astimezone(timezone.utc)
         exam_1_date_str = exam_1_date.isoformat()
         print(f"Creating Exam 1 scheduled for: {exam_1_date_str}")
         
@@ -73,7 +75,8 @@ def test_exam_scheduling():
         print("[PASS] Verification successful: submit_card_review next_review is capped correctly.")
         
         # 4. Create second exam (in 10 days)
-        exam_2_date = now + timedelta(days=10)
+        exam_2_date_local = (local_now + timedelta(days=10)).replace(hour=0, minute=0, second=0, microsecond=0)
+        exam_2_date = exam_2_date_local.astimezone(timezone.utc)
         exam_2_date_str = exam_2_date.isoformat()
         print(f"Creating Exam 2 scheduled for: {exam_2_date_str}")
         

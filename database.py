@@ -591,23 +591,29 @@ def set_setting(key, value):
 
 def parse_input_datetime(date_str):
     try:
-        # If it has T and no timezone offset, it's local time from datetime-local
-        if 'T' in date_str and '+' not in date_str and '-' not in date_str[10:] and not date_str.endswith('Z'):
-            naive_dt = datetime.fromisoformat(date_str)
-            # Localize to current local time and convert to UTC
-            local_dt = naive_dt.astimezone()
-            return local_dt.astimezone(timezone.utc)
+        # Try ISO format
+        if 'T' in date_str:
+            dt = datetime.fromisoformat(date_str)
         else:
-            # Otherwise parse normally using parse_db_datetime or fromisoformat
-            return datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+            dt = datetime.fromisoformat(date_str)
     except Exception:
-        # Fallback to date only
         try:
-            naive_date = datetime.strptime(date_str, "%Y-%m-%d")
-            local_dt = naive_date.astimezone()
-            return local_dt.astimezone(timezone.utc)
+            # Try YYYY-MM-DD
+            dt = datetime.strptime(date_str.strip()[:10], "%Y-%m-%d")
         except Exception:
-            return datetime.now(timezone.utc)
+            try:
+                # Try YYYY/MM/DD
+                dt = datetime.strptime(date_str.strip()[:10], "%Y/%m/%d")
+            except Exception:
+                dt = datetime.now()
+                
+    if dt.tzinfo is None:
+        local_dt = dt.astimezone()
+    else:
+        local_dt = dt.astimezone()
+        
+    local_dt = local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_dt.astimezone(timezone.utc)
 
 def distribute_exam_cards(exam_id):
     import random
@@ -831,7 +837,7 @@ def create_exam(name, date_str, deck_ids=None, folder_ids=None):
     distribute_exam_cards(exam_id)
     
     # Send Discord notification
-    msg = f"📅 新增考試行程通知：\n- 考試：{name.strip()}\n- 日期：{utc_dt.astimezone().strftime('%Y/%m/%d %H:%M')}"
+    msg = f"📅 新增考試行程通知：\n- 考試：{name.strip()}\n- 日期：{utc_dt.astimezone().strftime('%Y/%m/%d')}"
     send_discord_message(msg)
     
     return exam_id
@@ -865,11 +871,6 @@ def import_exams_csv(csv_text):
         if not name or not date_str or not scope_name:
             continue
             
-        if ' ' not in date_str and 'T' not in date_str:
-            date_str += " 08:00"
-            
-        parsed_date_str = date_str.replace(' ', 'T')
-        
         deck_ids = []
         folder_ids = []
         
@@ -885,7 +886,7 @@ def import_exams_csv(csv_text):
         if not deck_ids and not folder_ids:
             continue
             
-        utc_dt = parse_input_datetime(parsed_date_str)
+        utc_dt = parse_input_datetime(date_str)
         date_formatted = format_datetime_for_db(utc_dt)
         
         existing = cur.execute("SELECT id FROM exams WHERE name = ? AND date = ?", (name, date_formatted)).fetchone()

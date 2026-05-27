@@ -250,6 +250,16 @@ def study_folder(folder_id):
         return redirect(url_for('index'))
     return render_template('study.html', mode_type='folder', mode_id=folder_id, title=folder['name'])
 
+@app.route('/study/exam/<int:exam_id>')
+def study_exam(exam_id):
+    conn = db.get_db_connection()
+    exam = conn.execute("SELECT name FROM exams WHERE id = ?", (exam_id,)).fetchone()
+    conn.close()
+    if not exam:
+        flash('找不到該考試行程！', 'danger')
+        return redirect(url_for('index'))
+    return render_template('study.html', mode_type='exam', mode_id=exam_id, title=f"考試準備: {exam['name']}")
+
 # Study APIs
 
 @app.route('/study/api/cards')
@@ -262,6 +272,8 @@ def get_study_cards_api():
         new_cards, due_cards = db.get_study_cards(deck_id=mode_id)
     elif mode_type == 'folder':
         new_cards, due_cards = db.get_study_cards(folder_id=mode_id)
+    elif mode_type == 'exam':
+        new_cards, due_cards = db.get_study_cards(exam_id=mode_id)
     else:
         return jsonify({"error": "Invalid type"}), 400
         

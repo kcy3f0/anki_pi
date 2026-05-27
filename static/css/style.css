@@ -461,6 +461,18 @@ a:hover {
     font-size: 0.75rem;
     font-weight: 600;
 }
+a.badge {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+a.badge:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.92);
+    box-shadow: var(--shadow-sm);
+}
+a.badge:active {
+    transform: translateY(0);
+}
 .badge-due {
     background-color: var(--danger-light);
     color: var(--danger-dark);

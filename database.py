@@ -396,8 +396,14 @@ def import_csv_data(csv_text, deck_ids, card_type="recognize"):
 
 # Spaced Repetition (FSRS) Study
 
-def _get_earliest_exam_date(conn, deck_id, folder_id, now):
-    """Find the earliest upcoming exam date for a given deck or folder scope."""
+def _get_earliest_exam_date(conn, deck_id, folder_id, now, exam_id=None):
+    """Find the earliest upcoming exam date for a given deck, folder, or specific exam scope."""
+    if exam_id:
+        row = conn.execute("SELECT date as min_date FROM exams WHERE id = ?", (exam_id,)).fetchone()
+        if row and row['min_date']:
+            return parse_db_datetime(row['min_date'])
+        return None
+
     now_str = format_datetime_for_db(now)
 
     if deck_id:
@@ -433,7 +439,7 @@ def _get_earliest_exam_date(conn, deck_id, folder_id, now):
         return parse_db_datetime(row['min_date'])
     return None
 
-def get_study_cards(deck_id=None, folder_id=None):
+def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
     """
     Get cards for today's study session.
     - due_cards: FSRS scheduled reviews (next_review <= now)
@@ -458,11 +464,22 @@ def get_study_cards(deck_id=None, folder_id=None):
             WHERE df.folder_id = ?
         """
         params.append(folder_id)
+    elif exam_id:
+        query += """
+            WHERE cd.deck_id IN (
+                SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                UNION
+                SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                    SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                )
+            )
+        """
+        params.extend([exam_id, exam_id])
 
     rows = conn.execute(query, params).fetchall()
 
     # Query exam date before closing connection
-    earliest_exam_date = _get_earliest_exam_date(conn, deck_id, folder_id, now)
+    earliest_exam_date = _get_earliest_exam_date(conn, deck_id, folder_id, now, exam_id=exam_id)
     conn.close()
 
     new_cards = []

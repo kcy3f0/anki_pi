@@ -58,14 +58,26 @@
                                 <div class="progress-bar-fill" style="width: {{ exam.progress_percent }}%; background-color: var(--success); height: 100%; transition: width 0.3s ease;"></div>
                             </div>
 
+                            {% if not exam.is_expired %}
+                            <div style="margin-bottom: 16px;">
+                                <a href="{{ url_for('study_exam', exam_id=exam.id) }}" class="btn btn-primary btn-block" style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+                                    <i class="fa-solid fa-graduation-cap"></i> 開始準備此考試的所有牌組
+                                </a>
+                            </div>
+                            {% endif %}
+
                             <div style="margin-top: 8px;">
                                 <span style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">關聯範圍：</span>
                                 <div style="display: flex; flex-wrap: wrap; gap: 6px;">
                                     {% for folder in exam.folders %}
-                                        <span class="badge badge-spell-type"><i class="fa-solid fa-folder"></i> {{ folder.name }}</span>
+                                        <a href="{{ url_for('study_folder', folder_id=folder.id) }}" class="badge badge-spell-type" style="text-decoration: none;" title="點擊準備此資料夾">
+                                            <i class="fa-solid fa-folder"></i> {{ folder.name }}
+                                        </a>
                                     {% endfor %}
                                     {% for deck in exam.decks %}
-                                        <span class="badge badge-recognize-type"><i class="fa-solid fa-layer-group"></i> {{ deck.name }}</span>
+                                        <a href="{{ url_for('study_deck', deck_id=deck.id) }}" class="badge badge-recognize-type" style="text-decoration: none;" title="點擊準備此牌組">
+                                            <i class="fa-solid fa-layer-group"></i> {{ deck.name }}
+                                        </a>
                                     {% endfor %}
                                 </div>
                             </div>

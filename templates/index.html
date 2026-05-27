@@ -64,7 +64,7 @@
                                 <span class="badge badge-recognize-type" style="font-size: 0.75rem; padding: 2px 6px;"><i class="fa-solid fa-layer-group"></i> {{ deck.name }}</span>
                             {% endfor %}
                         </div>
-                        <a href="{{ url_for('exams_list') }}" class="btn btn-xs btn-outline-primary" style="padding: 4px 10px; border-radius: 4px; font-weight: 600;">
+                        <a href="{{ url_for('study_exam', exam_id=exam.id) }}" class="btn btn-xs btn-outline-primary" style="padding: 4px 10px; border-radius: 4px; font-weight: 600;">
                             準備 <i class="fa-solid fa-arrow-right"></i>
                         </a>
                     </div>

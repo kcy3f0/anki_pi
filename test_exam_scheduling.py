@@ -301,7 +301,62 @@ def test_exam_scheduling_new_cards_cutoff():
         conn.close()
         print("Cutoff Test clean up done.")
 
+def test_study_cards_by_exam_id():
+    print("=== Starting Study Cards by Exam ID Test ===")
+    conn = db.get_db_connection()
+    cur = conn.cursor()
+
+    # Create test deck
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Exam ID Test Deck",))
+    deck_id = cur.lastrowid
+
+    # Add 3 dummy cards
+    card_ids = []
+    now = datetime.now(timezone.utc)
+    now_str = db.format_datetime_for_db(now)
+    for i in range(3):
+        cur.execute("""
+            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (f"exam_id_word_{i}", f"測試單字_{i}", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+        card_id = cur.lastrowid
+        card_ids.append(card_id)
+        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, deck_id))
+
+    conn.commit()
+    conn.close()
+
+    try:
+        # Create exam (in 5 days)
+        exam_date = now + timedelta(days=5)
+        exam_date_str = db.format_datetime_for_db(exam_date)
+        exam_id = db.create_exam("Test Exam ID Study", exam_date_str, deck_ids=[deck_id])
+
+        # Get cards by exam_id
+        new_study, due_study = db.get_study_cards(exam_id=exam_id)
+        
+        # Verify that all 3 cards are returned since reps=0 and they are in the scope of the exam
+        assert len(new_study) > 0, "No new study cards returned for exam_id!"
+        for card in new_study:
+            assert card['front'].startswith("exam_id_word_")
+
+        print("[PASS] Study cards by exam_id successfully verified.")
+
+    finally:
+        # Cleanup
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM exams WHERE name = 'Test Exam ID Study'")
+        for cid in card_ids:
+            cur.execute("DELETE FROM cards WHERE id = ?", (cid,))
+            cur.execute("DELETE FROM card_decks WHERE card_id = ?", (cid,))
+        cur.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        conn.commit()
+        conn.close()
+        print("Exam ID Study test clean up done.")
+
 if __name__ == "__main__":
     test_exam_scheduling()
     test_exam_scheduling_new_cards_cutoff()
+    test_study_cards_by_exam_id()
 

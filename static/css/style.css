@@ -1466,3 +1466,220 @@ a.badge:active {
         padding: 16px !important;
     }
 }
+
+/* Today Daily Counter Card Styling */
+.today-counter-section {
+    margin-bottom: 32px;
+}
+.today-counter-card {
+    position: relative;
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.08));
+    border: 1px solid rgba(79, 70, 229, 0.2);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+}
+.dark-mode .today-counter-card {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(14, 165, 233, 0.1));
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+.today-counter-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+}
+
+.today-counter-glow {
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.2) 0%, transparent 70%);
+    z-index: 1;
+    pointer-events: none;
+}
+.today-counter-content {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+}
+@media (max-width: 768px) {
+    .today-counter-content {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+}
+.today-counter-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.today-title-group h2 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-top: 6px;
+    margin-bottom: 8px;
+}
+.today-title-group p {
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+}
+.today-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--primary-light);
+    color: var(--primary);
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    width: fit-content;
+}
+.dark-mode .today-tag {
+    background-color: rgba(99, 102, 241, 0.2);
+}
+.today-total-number {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    color: var(--primary);
+    font-weight: 800;
+}
+.dark-mode .today-total-number {
+    color: var(--primary);
+}
+
+.today-counter-right {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.today-split-box {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+}
+.today-split-box:hover {
+    border-color: var(--primary);
+    transform: translateX(4px);
+}
+.split-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.split-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+.exam-split .split-icon {
+    background-color: var(--danger-light);
+    color: var(--danger);
+}
+.general-split .split-icon {
+    background-color: var(--success-light);
+    color: var(--success);
+}
+.split-info h4 {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+.split-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.count-num {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.btn-today-start {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.btn-exam-start {
+    background-color: var(--danger);
+    color: white;
+}
+.btn-exam-start:hover {
+    background-color: #dc2626;
+    transform: translateY(-1px);
+}
+.btn-general-start {
+    background-color: var(--success);
+    color: white;
+}
+.btn-general-start:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+}
+.btn-today-done {
+    background-color: var(--border-color);
+    color: var(--text-secondary);
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Celebration State */
+.today-celebration {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px 0;
+    border-top: 1px dashed rgba(79, 70, 229, 0.2);
+}
+.confetti-icon {
+    font-size: 2.5rem;
+    animation: bounce 2s infinite;
+}
+.today-celebration h3 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--success);
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+.today-celebration p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+

@@ -355,8 +355,88 @@ def test_study_cards_by_exam_id():
         conn.close()
         print("Exam ID Study test clean up done.")
 
+def test_today_counters():
+    print("=== Starting Today Counters Test ===")
+    conn = db.get_db_connection()
+    cur = conn.cursor()
+    
+    # 1. Create two test decks
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Exam Target Deck",))
+    deck_exam_id = cur.lastrowid
+    
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("General Target Deck",))
+    deck_general_id = cur.lastrowid
+    
+    # 2. Add cards to both
+    now = datetime.now(timezone.utc)
+    now_str = db.format_datetime_for_db(now)
+    
+    # Card in exam deck
+    cur.execute("""
+        INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, ("today_exam_w1", "測試考試單字1", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+    c_exam_id = cur.lastrowid
+    cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c_exam_id, deck_exam_id))
+    
+    # Card in general deck
+    cur.execute("""
+        INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, ("today_general_w1", "測試一般單字1", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+    c_general_id = cur.lastrowid
+    cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c_general_id, deck_general_id))
+    
+    conn.commit()
+    conn.close()
+    
+    try:
+        # 3. Create an upcoming exam for the first deck
+        exam_date = now + timedelta(days=10)
+        exam_date_str = db.format_datetime_for_db(exam_date)
+        exam_id = db.create_exam("Test Today Counters Exam", exam_date_str, deck_ids=[deck_exam_id])
+        
+        # 4. Get summary stats
+        stats = db.get_today_summary_stats()
+        print(f"Stats returned: {stats}")
+        
+        # Check that we have at least 1 in exams and 1 in general
+        assert stats['exam_total'] >= 1, "Exam deck cards should be counted in exam_total!"
+        assert stats['general_total'] >= 1, "General deck cards should be counted in general_total!"
+        assert stats['today_total'] == stats['exam_total'] + stats['general_total'], "today_total should sum exam_total and general_total!"
+        
+        # 5. Get cards list
+        exam_new_cards, exam_due_cards = db.get_today_cards(only_exams=True)
+        general_new_cards, general_due_cards = db.get_today_cards(only_exams=False)
+        
+        # Verify specific front words are in the lists
+        exam_fronts = [c['front'] for c in exam_new_cards + exam_due_cards]
+        general_fronts = [c['front'] for c in general_new_cards + general_due_cards]
+        
+        print(f"Exam fronts: {exam_fronts}")
+        print(f"General fronts: {general_fronts}")
+        
+        assert "today_exam_w1" in exam_fronts, "today_exam_w1 must be in exam cards!"
+        assert "today_general_w1" in general_fronts, "today_general_w1 must be in general cards!"
+        assert "today_exam_w1" not in general_fronts, "today_exam_w1 must NOT be in general cards!"
+        assert "today_general_w1" not in exam_fronts, "today_general_w1 must NOT be in exam cards!"
+        
+        print("[PASS] Today counters test successfully verified.")
+        
+    finally:
+        # Cleanup
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM exams WHERE name = 'Test Today Counters Exam'")
+        cur.execute("DELETE FROM cards WHERE front IN ('today_exam_w1', 'today_general_w1')")
+        cur.execute("DELETE FROM card_decks WHERE deck_id IN (?, ?)", (deck_exam_id, deck_general_id))
+        cur.execute("DELETE FROM decks WHERE id IN (?, ?)", (deck_exam_id, deck_general_id))
+        conn.commit()
+        conn.close()
+        print("Today counters test cleanup done.")
+
 if __name__ == "__main__":
     test_exam_scheduling()
     test_exam_scheduling_new_cards_cutoff()
     test_study_cards_by_exam_id()
-
+    test_today_counters()

@@ -1037,6 +1037,135 @@ def import_exams_csv(csv_text):
         
     return imported_count
 
+def get_today_cards(only_exams=True):
+    """
+    Get all new and due cards scheduled for today, grouped by whether they are part of active upcoming exams.
+    - only_exams=True: only cards belonging to decks/folders in active exams.
+    - only_exams=False: cards belonging to other decks.
+    """
+    process_expired_exams()
+    
+    conn = get_db_connection()
+    now = datetime.now(timezone.utc)
+    now_str = format_datetime_for_db(now)
+    
+    active_exams = conn.execute("SELECT id FROM exams WHERE date > ? AND processed = 0", (now_str,)).fetchall()
+    active_exam_ids = [e['id'] for e in active_exams]
+    
+    exam_deck_ids = set()
+    if active_exam_ids:
+        placeholders = ",".join(["?"] * len(active_exam_ids))
+        
+        # Decks directly linked to these exams
+        direct_decks = conn.execute(f"SELECT deck_id FROM exam_decks WHERE exam_id IN ({placeholders})", active_exam_ids).fetchall()
+        for d in direct_decks:
+            exam_deck_ids.add(d['deck_id'])
+            
+        # Decks linked to folders of these exams
+        folder_decks = conn.execute(f"""
+            SELECT df.deck_id FROM deck_folders df
+            JOIN exam_folders ef ON df.folder_id = ef.folder_id
+            WHERE ef.exam_id IN ({placeholders})
+        """, active_exam_ids).fetchall()
+        for d in folder_decks:
+            exam_deck_ids.add(d['deck_id'])
+            
+    # Get all decks
+    all_decks = conn.execute("SELECT id FROM decks").fetchall()
+    conn.close()
+    
+    new_cards_dict = {}
+    due_cards_dict = {}
+    
+    for d in all_decks:
+        deck_id = d['id']
+        is_exam_deck = deck_id in exam_deck_ids
+        
+        if (only_exams and is_exam_deck) or (not only_exams and not is_exam_deck):
+            new_c, due_c = get_study_cards(deck_id=deck_id)
+            for c in new_c:
+                new_cards_dict[c['id']] = c
+            for c in due_c:
+                due_cards_dict[c['id']] = c
+                
+    return list(new_cards_dict.values()), list(due_cards_dict.values())
+
+def get_today_summary_stats():
+    """
+    Get summary stats of today's study queue.
+    """
+    process_expired_exams()
+    
+    conn = get_db_connection()
+    now = datetime.now(timezone.utc)
+    now_str = format_datetime_for_db(now)
+    
+    active_exams = conn.execute("SELECT id FROM exams WHERE date > ? AND processed = 0", (now_str,)).fetchall()
+    active_exam_ids = [e['id'] for e in active_exams]
+    
+    exam_deck_ids = set()
+    if active_exam_ids:
+        placeholders = ",".join(["?"] * len(active_exam_ids))
+        
+        # Decks directly linked to these exams
+        direct_decks = conn.execute(f"SELECT deck_id FROM exam_decks WHERE exam_id IN ({placeholders})", active_exam_ids).fetchall()
+        for d in direct_decks:
+            exam_deck_ids.add(d['deck_id'])
+            
+        # Decks linked to folders of these exams
+        folder_decks = conn.execute(f"""
+            SELECT df.deck_id FROM deck_folders df
+            JOIN exam_folders ef ON df.folder_id = ef.folder_id
+            WHERE ef.exam_id IN ({placeholders})
+        """, active_exam_ids).fetchall()
+        for d in folder_decks:
+            exam_deck_ids.add(d['deck_id'])
+            
+    # Get all decks
+    all_decks = conn.execute("SELECT id FROM decks").fetchall()
+    conn.close()
+    
+    exam_new = {}
+    exam_due = {}
+    general_new = {}
+    general_due = {}
+    
+    for d in all_decks:
+        deck_id = d['id']
+        is_exam_deck = deck_id in exam_deck_ids
+        
+        new_c, due_c = get_study_cards(deck_id=deck_id)
+        if is_exam_deck:
+            for c in new_c:
+                exam_new[c['id']] = c
+            for c in due_c:
+                exam_due[c['id']] = c
+        else:
+            for c in new_c:
+                general_new[c['id']] = c
+            for c in due_c:
+                general_due[c['id']] = c
+                
+    exam_new_count = len(exam_new)
+    exam_due_count = len(exam_due)
+    exam_total = exam_new_count + exam_due_count
+    
+    general_new_count = len(general_new)
+    general_due_count = len(general_due)
+    general_total = general_new_count + general_due_count
+    
+    today_total = exam_total + general_total
+    
+    return {
+        "exam_new_count": exam_new_count,
+        "exam_due_count": exam_due_count,
+        "exam_total": exam_total,
+        "general_new_count": general_new_count,
+        "general_due_count": general_due_count,
+        "general_total": general_total,
+        "today_total": today_total
+    }
+
 def init_db_schema():
     conn = sqlite3.connect(Config.DATABASE_PATH, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")

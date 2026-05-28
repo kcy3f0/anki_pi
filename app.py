@@ -37,6 +37,9 @@ def index():
     all_exams = db.get_all_exams()
     upcoming_exams = [e for e in all_exams if not e['is_expired'] and e['processed'] == 0]
     
+    # Fetch today's summary stats
+    today_stats = db.get_today_summary_stats()
+    
     return render_template(
         'index.html',
         folders=folders,
@@ -45,7 +48,8 @@ def index():
         deck_form=deck_form,
         card_form=card_form,
         import_form=import_form,
-        upcoming_exams=upcoming_exams
+        upcoming_exams=upcoming_exams,
+        today_stats=today_stats
     )
 
 # Folders and Decks Routing
@@ -260,6 +264,14 @@ def study_exam(exam_id):
         return redirect(url_for('index'))
     return render_template('study.html', mode_type='exam', mode_id=exam_id, title=f"考試準備: {exam['name']}")
 
+@app.route('/study/today/exams')
+def study_today_exams():
+    return render_template('study.html', mode_type='today_exams', mode_id=0, title='今日考試單字')
+
+@app.route('/study/today/general')
+def study_today_general():
+    return render_template('study.html', mode_type='today_general', mode_id=0, title='今日一般複習')
+
 # Study APIs
 
 @app.route('/study/api/cards')
@@ -274,6 +286,10 @@ def get_study_cards_api():
         new_cards, due_cards = db.get_study_cards(folder_id=mode_id)
     elif mode_type == 'exam':
         new_cards, due_cards = db.get_study_cards(exam_id=mode_id)
+    elif mode_type == 'today_exams':
+        new_cards, due_cards = db.get_today_cards(only_exams=True)
+    elif mode_type == 'today_general':
+        new_cards, due_cards = db.get_today_cards(only_exams=False)
     else:
         return jsonify({"error": "Invalid type"}), 400
         

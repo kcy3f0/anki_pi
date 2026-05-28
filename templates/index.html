@@ -24,6 +24,78 @@
     </div>
 </div>
 
+<!-- 今日學習進度與計數器 -->
+<section class="today-counter-section">
+    <div class="today-counter-card">
+        <div class="today-counter-glow"></div>
+        <div class="today-counter-content">
+            <div class="today-counter-left">
+                <div class="today-title-group">
+                    <span class="today-tag"><i class="fa-solid fa-bolt-lightning"></i> 今日進度</span>
+                    <h2>今日背單字目標</h2>
+                    {% if today_stats.today_total > 0 %}
+                        <p>今天還有 <strong class="today-total-number">{{ today_stats.today_total }}</strong> 個單字等待挑戰！</p>
+                    {% else %}
+                        <p>太棒了！今日背單字目標已達成！</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="today-counter-right">
+                <!-- 考試範圍單字 -->
+                <div class="today-split-box exam-split">
+                    <div class="split-info">
+                        <span class="split-icon"><i class="fa-solid fa-graduation-cap"></i></span>
+                        <div>
+                            <h4>考試日程範圍</h4>
+                            <p class="split-count">
+                                待複習: <span class="count-num">{{ today_stats.exam_due_count }}</span> | 
+                                新單字: <span class="count-num">{{ today_stats.exam_new_count }}</span>
+                            </p>
+                        </div>
+                    </div>
+                    {% if today_stats.exam_total > 0 %}
+                        <a href="{{ url_for('study_today_exams') }}" class="btn btn-today-start btn-exam-start">
+                            開始學習 <i class="fa-solid fa-circle-play"></i>
+                        </a>
+                    {% else %}
+                        <span class="btn btn-today-done"><i class="fa-solid fa-circle-check"></i> 已完成</span>
+                    {% endif %}
+                </div>
+                
+                <!-- 一般複習單字 -->
+                <div class="today-split-box general-split">
+                    <div class="split-info">
+                        <span class="split-icon"><i class="fa-solid fa-book-open"></i></span>
+                        <div>
+                            <h4>一般複習範圍</h4>
+                            <p class="split-count">
+                                待複習: <span class="count-num">{{ today_stats.general_due_count }}</span> | 
+                                新單字: <span class="count-num">{{ today_stats.general_new_count }}</span>
+                            </p>
+                        </div>
+                    </div>
+                    {% if today_stats.general_total > 0 %}
+                        <a href="{{ url_for('study_today_general') }}" class="btn btn-today-start btn-general-start">
+                            開始學習 <i class="fa-solid fa-circle-play"></i>
+                        </a>
+                    {% else %}
+                        <span class="btn btn-today-done"><i class="fa-solid fa-circle-check"></i> 已完成</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        {% if today_stats.today_total == 0 %}
+            <div class="today-celebration">
+                <div class="confetti-icon">🎉</div>
+                <h3>今日學習任務已全數達成！</h3>
+                <p>持之以恆，您在朝向目標邁進！明天見！</p>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
 {% if upcoming_exams %}
 <section class="upcoming-exams-section" style="margin-bottom: 32px;">
     <h2 style="font-family: var(--font-display); font-size: 1.35rem; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">

@@ -293,7 +293,8 @@ def add_card(front, back, card_type, deck_ids):
     if existing:
         # Merge duplicates: append new back to existing back with double newline
         merged_back = existing['back'] + "\n\n" + back
-        cur.execute("UPDATE cards SET back = ? WHERE id = ?", (merged_back, existing['id']))
+        new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
+        cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
         card_id = existing['id']
         
         # Link card to deck_ids if not already linked
@@ -375,7 +376,8 @@ def import_csv_data(csv_text, deck_ids, card_type="recognize"):
         
         if existing:
             merged_back = existing['back'] + "\n\n" + back
-            cur.execute("UPDATE cards SET back = ? WHERE id = ?", (merged_back, existing['id']))
+            new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
+            cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
             card_id = existing['id']
             merged_count += 1
         else:

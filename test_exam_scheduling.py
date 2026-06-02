@@ -435,8 +435,96 @@ def test_today_counters():
         conn.close()
         print("Today counters test cleanup done.")
 
+def test_card_type_merging():
+    print("=== Starting Card Type Merging Integration Test ===")
+    conn = db.get_db_connection()
+    cur = conn.cursor()
+
+    # Create test deck
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Merge Test Deck",))
+    deck_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    try:
+        # Test Case 1: add_card recognize + recognize -> recognize
+        cid1, merged = db.add_card("merge_word_1", "測試1", "recognize", [deck_id])
+        assert not merged
+        c1 = db.get_card_by_id(cid1)
+        assert c1['card_type'] == 'recognize'
+
+        # Add second recognize card to merge
+        cid1_new, merged = db.add_card("merge_word_1", "測試1_加強", "recognize", [deck_id])
+        assert merged
+        assert cid1 == cid1_new
+        c1_merged = db.get_card_by_id(cid1)
+        assert c1_merged['card_type'] == 'recognize'
+        assert c1_merged['back'] == "測試1\n\n測試1_加強"
+
+        # Test Case 2: add_card recognize + spell -> spell
+        cid2, merged = db.add_card("merge_word_2", "測試2", "recognize", [deck_id])
+        assert not merged
+        
+        cid2_new, merged = db.add_card("merge_word_2", "測試2_拼寫", "spell", [deck_id])
+        assert merged
+        c2_merged = db.get_card_by_id(cid2)
+        assert c2_merged['card_type'] == 'spell'
+
+        # Test Case 3: add_card spell + recognize -> spell
+        cid3, merged = db.add_card("merge_word_3", "測試3", "spell", [deck_id])
+        assert not merged
+
+        cid3_new, merged = db.add_card("merge_word_3", "測試3_認讀", "recognize", [deck_id])
+        assert merged
+        c3_merged = db.get_card_by_id(cid3)
+        assert c3_merged['card_type'] == 'spell'
+
+        # Test Case 4: import_csv_data recognize + spell -> spell
+        # Create initial recognize card
+        cid4, merged = db.add_card("merge_csv_word", "舊CSV解釋", "recognize", [deck_id])
+        assert not merged
+
+        # Import CSV with spell type
+        csv_text = "merge_csv_word,新CSV解釋\n"
+        imported, merged_count = db.import_csv_data(csv_text, [deck_id], card_type="spell")
+        assert imported == 0
+        assert merged_count == 1
+
+        c4_merged = db.get_card_by_id(cid4)
+        assert c4_merged['card_type'] == 'spell'
+        assert c4_merged['back'] == "舊CSV解釋\n\n新CSV解釋"
+
+        # Test Case 5: import_csv_data spell + recognize -> spell
+        # Create initial spell card
+        cid5, merged = db.add_card("merge_csv_word_2", "舊CSV解釋2", "spell", [deck_id])
+        assert not merged
+
+        # Import CSV with recognize type
+        csv_text_2 = "merge_csv_word_2,新CSV解釋2\n"
+        imported_2, merged_count_2 = db.import_csv_data(csv_text_2, [deck_id], card_type="recognize")
+        assert imported_2 == 0
+        assert merged_count_2 == 1
+
+        c5_merged = db.get_card_by_id(cid5)
+        assert c5_merged['card_type'] == 'spell'
+
+        print("[PASS] Card type merging integration tests passed successfully.")
+
+    finally:
+        # Cleanup
+        print("Cleaning up merge test data...")
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM cards WHERE front LIKE 'merge_%'")
+        cur.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
+        cur.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        conn.commit()
+        conn.close()
+        print("Merge Test clean up done.")
+
 if __name__ == "__main__":
     test_exam_scheduling()
     test_exam_scheduling_new_cards_cutoff()
     test_study_cards_by_exam_id()
     test_today_counters()
+    test_card_type_merging()

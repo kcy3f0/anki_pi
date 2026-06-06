@@ -171,6 +171,7 @@
 
 歡迎提交 Pull Request 或回報問題！
 
-## 📄 授權
+---
+## 版權聲明
 
-本專案採用 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) 授權](https://creativecommons.org/licenses/by-nc-sa/4.0/)。
+This is an unofficial, community-driven project and is not affiliated with, endorsed, or sponsored by the official Anki project.

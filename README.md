@@ -172,6 +172,28 @@
 歡迎提交 Pull Request 或回報問題！
 
 ---
-## 版權聲明
+## ⚖️ 授權與版權聲明 (License and Attribution)
 
-This is an unofficial, community-driven project and is not affiliated with, endorsed, or sponsored by the official Anki project.
+本專案採用 **GNU Affero General Public License v3.0 (AGPL-3.0) 或更新版本** 進行授權。詳細授權條款請參閱專案中的 [LICENSE](file:///C:/Users/kcy3f/anki_pi/LICENSE) 檔案。
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0) or later**. See the [LICENSE](file:///C:/Users/kcy3f/anki_pi/LICENSE) file for details.
+
+---
+
+### 📌 聲明與致謝 / Disclaimer and Attribution
+
+1. **非官方聲明 / Disclaimer**
+   - **中文**：本專案是一個獨立開發、非官方的學習管理工具，受 Anki 專案啟發（Anki-inspired web application），與官方的 Anki 專案（Anki, AnkiWeb, AnkiMobile 或 AnkiDroid）無任何關聯，亦未獲得官方的背書、贊助或授權。
+   - **English**: This is an independent, unofficial study management tool inspired by the Anki project (Anki-inspired web application). It is not affiliated with, endorsed, or sponsored by the official Anki project (Anki, AnkiWeb, AnkiMobile, or AnkiDroid).
+
+2. **對原專案的致敬 / Attribution and Acknowledgments**
+   - **中文**：本專案的設計概念與排程邏輯深深啟發自開源的 **Anki** 專案。我們在此向原作者及開源社群表達誠摯的感謝。
+     - 官方 Anki 專案首頁：[https://apps.ankiweb.net](https://apps.ankiweb.net)
+     - 官方 Anki 專案原始碼：[https://github.com/ankitects/anki](https://github.com/ankitects/anki)
+   - **English**: The design concepts and scheduling logic of this project are deeply inspired by the open-source **Anki** project. We express our sincere gratitude to the original authors and the open-source community.
+     - Anki Webpage: [https://apps.ankiweb.net](https://apps.ankiweb.net)
+     - Anki Repository: [https://github.com/ankitects/anki](https://github.com/ankitects/anki)
+
+3. **Anki 商標與標誌 / Anki Trademarks and Logos**
+   - **中文**：本專案與官方 Anki 專案無關。若使用 Anki 的 Logo，將完全遵循其授權條款：包含附上指向 [Anki 官網](https://apps.ankiweb.net) 的連結、表明此非官方出版，且未對圖檔本身進行修改。
+   - **English**: This project has no affiliation with the official Anki project. Any use of the Anki logo will strictly comply with its trademark terms: providing a link to [https://apps.ankiweb.net](https://apps.ankiweb.net), making it clear that this content is an independent work and not originating from the Anki project, and keeping the logo unmodified.

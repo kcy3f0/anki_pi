@@ -522,9 +522,80 @@ def test_card_type_merging():
         conn.close()
         print("Merge Test clean up done.")
 
+def test_desired_retention_scheduling():
+    print("=== Starting Desired Retention Scheduling Test ===")
+    conn = db.get_db_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Test Retention Deck",))
+    deck_id = cur.lastrowid
+    
+    # Save original retention to restore later
+    original_retention = db.get_setting('desired_retention')
+    
+    try:
+        # Create card 1 (retention 0.70)
+        db.set_setting('desired_retention', '0.70')
+        cur.execute("""
+            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("retention_word_1", "保留率測試_1", db.format_datetime_for_db(datetime.now(timezone.utc)), 0, 0, None, None, None, 0, 0, 'recognize'))
+        c1_id = cur.lastrowid
+        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c1_id, deck_id))
+        conn.commit()
+        
+        # Review card 1
+        db.submit_card_review(c1_id, 3) # Rating: Good
+        
+        c1_updated = db.get_card_by_id(c1_id)
+        c1_due = db.parse_db_datetime(c1_updated['next_review'])
+        
+        # Create card 2 (retention 0.99)
+        db.set_setting('desired_retention', '0.99')
+        cur.execute("""
+            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("retention_word_2", "保留率測試_2", db.format_datetime_for_db(datetime.now(timezone.utc)), 0, 0, None, None, None, 0, 0, 'recognize'))
+        c2_id = cur.lastrowid
+        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c2_id, deck_id))
+        conn.commit()
+        
+        # Review card 2
+        db.submit_card_review(c2_id, 3) # Rating: Good
+        
+        c2_updated = db.get_card_by_id(c2_id)
+        c2_due = db.parse_db_datetime(c2_updated['next_review'])
+        
+        print(f"Desired Retention 0.70 -> Next Review: {c1_due}")
+        print(f"Desired Retention 0.99 -> Next Review: {c2_due}")
+        
+        # Retention 0.99 will have a much shorter interval than 0.70
+        assert c2_due < c1_due, f"Retention 0.99 due ({c2_due}) should be earlier than 0.70 due ({c1_due})"
+        print("[PASS] Verification successful: Higher retention results in shorter review intervals.")
+        
+    finally:
+        # Restore setting
+        if original_retention is not None:
+            db.set_setting('desired_retention', original_retention)
+        else:
+            conn = db.get_db_connection()
+            conn.execute("DELETE FROM settings WHERE key = 'desired_retention'")
+            conn.commit()
+            conn.close()
+            
+        # Clean up
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM cards WHERE front LIKE 'retention_word_%'")
+        cur.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
+        cur.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        conn.commit()
+        conn.close()
+        print("Retention Test clean up done.")
+
 if __name__ == "__main__":
     test_exam_scheduling()
     test_exam_scheduling_new_cards_cutoff()
     test_study_cards_by_exam_id()
     test_today_counters()
     test_card_type_merging()
+    test_desired_retention_scheduling()

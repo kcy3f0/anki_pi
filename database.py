@@ -548,8 +548,13 @@ def submit_card_review(card_id, rating_val):
     card.last_review = parse_db_datetime(row['last_review'])
     card.due = parse_db_datetime(row['next_review'])
     
-    # Initialize scheduler
-    s = Scheduler()
+    # Initialize scheduler with dynamic desired retention
+    retention_val = get_setting('desired_retention', '0.9')
+    try:
+        retention = float(retention_val)
+    except (ValueError, TypeError):
+        retention = 0.9
+    s = Scheduler(desired_retention=retention)
     now = datetime.now(timezone.utc)
     
     # Calculate scheduling
@@ -1183,6 +1188,12 @@ def init_db_schema():
     conn = sqlite3.connect(Config.DATABASE_PATH, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS exams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

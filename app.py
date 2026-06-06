@@ -321,9 +321,32 @@ def review_card_api():
 
 # Settings Routing
 
-@app.route('/settings')
+@app.route('/settings', methods=['GET', 'POST'])
 def settings():
-    return render_template('settings.html')
+    if request.method == 'POST':
+        form = EmptyForm()
+        if form.validate_on_submit():
+            desired_retention = request.form.get('desired_retention')
+            try:
+                val = float(desired_retention)
+                if 0.7 <= val <= 0.99:
+                    db.set_setting('desired_retention', str(val))
+                    flash(f'設定已更新！FSRS 記憶程度（期望保留率）已設為 {int(val*100)}%', 'success')
+                else:
+                    flash('無效的記憶程度數值，範圍應在 0.70 到 0.99 之間', 'danger')
+            except (ValueError, TypeError):
+                flash('無效的數值格式', 'danger')
+        else:
+            flash('CSRF 驗證失敗，請重試。', 'danger')
+        return redirect(url_for('settings'))
+        
+    retention_val = db.get_setting('desired_retention', '0.9')
+    try:
+        retention = float(retention_val)
+    except (ValueError, TypeError):
+        retention = 0.9
+        
+    return render_template('settings.html', desired_retention=retention)
 
 @app.route('/settings/reset-progress', methods=['POST'])
 def reset_progress():

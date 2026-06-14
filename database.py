@@ -523,8 +523,8 @@ def submit_card_review(card_id, rating_val):
             card = Card()
             db_state = row['state']
             reps = row['reps'] or 0
-            if reps == 0:
-                db_state = 0
+            if db_state == 0 or reps == 0:
+                db_state = 1
             card.state = State(db_state)
             card.step = row['step'] or 0
             card.stability = row['stability']

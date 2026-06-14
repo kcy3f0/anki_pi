@@ -173,14 +173,16 @@ def create_deck(name, folder_ids=None):
 
 def update_deck(deck_id, name, folder_ids=None):
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE decks SET name = ? WHERE id = ?", (name, deck_id))
-    cur.execute("DELETE FROM deck_folders WHERE deck_id = ?", (deck_id,))
-    if folder_ids:
-        for fid in folder_ids:
-            cur.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, fid))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE decks SET name = ? WHERE id = ?", (name, deck_id))
+            cur.execute("DELETE FROM deck_folders WHERE deck_id = ?", (deck_id,))
+            if folder_ids:
+                for fid in folder_ids:
+                    cur.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, fid))
+    finally:
+        conn.close()
 
 def delete_deck(deck_id):
     conn = get_db_connection()
@@ -323,10 +325,12 @@ def update_card(card_id, front, back, card_type, deck_ids):
 
 def delete_card(card_id):
     conn = get_db_connection()
-    conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
-    conn.execute("DELETE FROM card_decks WHERE card_id = ?", (card_id,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.execute("DELETE FROM card_decks WHERE card_id = ?", (card_id,))
+            conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    finally:
+        conn.close()
 
 # Batch CSV Import
 
@@ -642,23 +646,27 @@ def delete_all_app_data():
 
 def get_setting(key, default=None):
     conn = get_db_connection()
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    conn.close()
-    if row:
-        return row['value']
-    return default
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        if row:
+            return row['value']
+        return default
+    finally:
+        conn.close()
 
 def set_setting(key, value):
     conn = get_db_connection()
-    cur = conn.cursor()
-    # Check if exists
-    row = cur.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
-    if row:
-        cur.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
-    else:
-        cur.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            cur = conn.cursor()
+            # Check if exists
+            row = cur.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+            if row:
+                cur.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+            else:
+                cur.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+    finally:
+        conn.close()
 
 # --- Exam Schedule & Vocabulary Adjustments ---
 
@@ -776,6 +784,7 @@ def distribute_exam_cards(exam_id):
 
 def process_expired_exams():
     conn = get_db_connection()
+    exams_to_distribute = []
     try:
         cur = conn.cursor()
         now = datetime.now(timezone.utc)
@@ -817,89 +826,88 @@ def process_expired_exams():
                     
                     # Check overlap
                     if any(d in expired_deck_ids for d in u_deck_ids):
-                        # Release connection before calling child
-                        conn.close()
-                        try:
-                            distribute_exam_cards(u_id)
-                        finally:
-                            conn = get_db_connection()
-                            cur = conn.cursor()
+                        exams_to_distribute.append(u_id)
                         break
     finally:
         conn.close()
+        
+    for u_id in exams_to_distribute:
+        distribute_exam_cards(u_id)
 
 def get_all_exams():
     conn = get_db_connection()
-    exams = conn.execute("SELECT * FROM exams ORDER BY date ASC").fetchall()
-    
-    exam_list = []
-    now = datetime.now(timezone.utc)
-    
-    for e in exams:
-        e_dict = dict(e)
-        exam_id = e['id']
+    try:
+        exams = conn.execute("SELECT * FROM exams ORDER BY date ASC").fetchall()
         
-        # Get associated decks
-        decks = conn.execute("""
-            SELECT d.id, d.name FROM decks d
-            JOIN exam_decks ed ON d.id = ed.deck_id
-            WHERE ed.exam_id = ?
-        """, (exam_id,)).fetchall()
-        e_dict['decks'] = [dict(d) for d in decks]
+        exam_list = []
+        now = datetime.now(timezone.utc)
         
-        # Get associated folders
-        folders = conn.execute("""
-            SELECT f.id, f.name FROM folders f
-            JOIN exam_folders ef ON f.id = ef.folder_id
-            WHERE ef.exam_id = ?
-        """, (exam_id,)).fetchall()
-        e_dict['folders'] = [dict(f) for f in folders]
-        
-        # Calculate stats and progress
-        cards = conn.execute("""
-            SELECT c.id, c.reps, c.next_review FROM cards c
-            WHERE c.id IN (
-                SELECT cd.card_id FROM card_decks cd
-                WHERE cd.deck_id IN (
-                    SELECT deck_id FROM exam_decks WHERE exam_id = ?
-                    UNION
-                    SELECT deck_id FROM deck_folders WHERE folder_id IN (
-                        SELECT folder_id FROM exam_folders WHERE exam_id = ?
+        for e in exams:
+            e_dict = dict(e)
+            exam_id = e['id']
+            
+            # Get associated decks
+            decks = conn.execute("""
+                SELECT d.id, d.name FROM decks d
+                JOIN exam_decks ed ON d.id = ed.deck_id
+                WHERE ed.exam_id = ?
+            """, (exam_id,)).fetchall()
+            e_dict['decks'] = [dict(d) for d in decks]
+            
+            # Get associated folders
+            folders = conn.execute("""
+                SELECT f.id, f.name FROM folders f
+                JOIN exam_folders ef ON f.id = ef.folder_id
+                WHERE ef.exam_id = ?
+            """, (exam_id,)).fetchall()
+            e_dict['folders'] = [dict(f) for f in folders]
+            
+            # Calculate stats and progress
+            cards = conn.execute("""
+                SELECT c.id, c.reps, c.next_review FROM cards c
+                WHERE c.id IN (
+                    SELECT cd.card_id FROM card_decks cd
+                    WHERE cd.deck_id IN (
+                        SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                        UNION
+                        SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                            SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                        )
                     )
                 )
-            )
-        """, (exam_id, exam_id)).fetchall()
-        
-        total_cards = len(cards)
-        learned_cards = sum(1 for c in cards if (c['reps'] or 0) > 0)
-        
-        e_dict['total_cards'] = total_cards
-        e_dict['learned_cards'] = learned_cards
-        e_dict['progress_percent'] = int((learned_cards / total_cards * 100)) if total_cards > 0 else 0
-        
-        # Countdown details
-        exam_date = parse_db_datetime(e['date'])
-        delta = exam_date - now
-        e_dict['days_remaining'] = delta.days
-        e_dict['seconds_remaining'] = int(delta.total_seconds())
-        
-        if delta.total_seconds() <= 0:
-            e_dict['countdown_str'] = "已結束"
-            e_dict['is_expired'] = True
-        else:
-            e_dict['is_expired'] = False
-            days = delta.days
-            hours = int((delta.total_seconds() % 86400) // 3600)
-            if days > 0:
-                e_dict['countdown_str'] = f"剩餘 {days} 天 {hours} 小時"
+            """, (exam_id, exam_id)).fetchall()
+            
+            total_cards = len(cards)
+            learned_cards = sum(1 for c in cards if (c['reps'] or 0) > 0)
+            
+            e_dict['total_cards'] = total_cards
+            e_dict['learned_cards'] = learned_cards
+            e_dict['progress_percent'] = int((learned_cards / total_cards * 100)) if total_cards > 0 else 0
+            
+            # Countdown details
+            exam_date = parse_db_datetime(e['date'])
+            delta = exam_date - now
+            e_dict['days_remaining'] = delta.days
+            e_dict['seconds_remaining'] = int(delta.total_seconds())
+            
+            if delta.total_seconds() <= 0:
+                e_dict['countdown_str'] = "已結束"
+                e_dict['is_expired'] = True
             else:
-                minutes = int((delta.total_seconds() % 3600) // 60)
-                e_dict['countdown_str'] = f"剩餘 {hours} 小時 {minutes} 分鐘"
-                
-        exam_list.append(e_dict)
-        
-    conn.close()
-    return exam_list
+                e_dict['is_expired'] = False
+                days = delta.days
+                hours = int((delta.total_seconds() % 86400) // 3600)
+                if days > 0:
+                    e_dict['countdown_str'] = f"剩餘 {days} 天 {hours} 小時"
+                else:
+                    minutes = int((delta.total_seconds() % 3600) // 60)
+                    e_dict['countdown_str'] = f"剩餘 {hours} 小時 {minutes} 分鐘"
+                    
+            exam_list.append(e_dict)
+            
+        return exam_list
+    finally:
+        conn.close()
 
 def create_exam(name, date_str, deck_ids=None, folder_ids=None):
     conn = get_db_connection()
@@ -940,6 +948,7 @@ def delete_exam(exam_id):
 
 def import_exams_csv(csv_text):
     conn = get_db_connection()
+    imported_exam_ids = set()
     try:
         with conn:
             cur = conn.cursor()
@@ -1001,19 +1010,14 @@ def import_exams_csv(csv_text):
                         for fid in folder_ids:
                             cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
                             
+                imported_exam_ids.add(exam_id)
                 imported_count += 1
     finally:
         conn.close()
     
     if imported_count > 0:
-        conn = get_db_connection()
-        try:
-            unprocessed = conn.execute("SELECT id FROM exams WHERE processed = 0").fetchall()
-        finally:
-            conn.close()
-            
-        for r in unprocessed:
-            distribute_exam_cards(r['id'])
+        for eid in imported_exam_ids:
+            distribute_exam_cards(eid)
             
         send_discord_message(f"📋 批次匯入考試行程成功！共匯入 {imported_count} 筆考試。")
         

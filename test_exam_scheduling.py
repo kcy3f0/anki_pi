@@ -524,10 +524,16 @@ def test_card_type_merging():
 
 def test_desired_retention_scheduling():
     print("=== Starting Desired Retention Scheduling Test ===")
+    
+    # Setup test deck
     conn = db.get_db_connection()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Test Retention Deck",))
-    deck_id = cur.lastrowid
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO decks (name) VALUES (?)", ("Test Retention Deck",))
+            deck_id = cur.lastrowid
+    finally:
+        conn.close()
     
     # Save original retention to restore later
     original_retention = db.get_setting('desired_retention')
@@ -535,13 +541,21 @@ def test_desired_retention_scheduling():
     try:
         # Create card 1 (retention 0.70)
         db.set_setting('desired_retention', '0.70')
-        cur.execute("""
-            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ("retention_word_1", "保留率測試_1", db.format_datetime_for_db(datetime.now(timezone.utc)), 0, 0, None, None, None, 0, 0, 'recognize'))
-        c1_id = cur.lastrowid
-        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c1_id, deck_id))
-        conn.commit()
+        
+        conn = db.get_db_connection()
+        try:
+            with conn:
+                cur = conn.cursor()
+                now_str = db.format_datetime_for_db(datetime.now(timezone.utc))
+                yesterday_str = db.format_datetime_for_db(datetime.now(timezone.utc) - timedelta(days=1))
+                cur.execute("""
+                    INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ("retention_word_1", "保留率測試_1", now_str, 2, 0, 10.0, 5.0, yesterday_str, 1, 0, 'recognize'))
+                c1_id = cur.lastrowid
+                cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c1_id, deck_id))
+        finally:
+            conn.close()
         
         # Review card 1
         db.submit_card_review(c1_id, 3) # Rating: Good
@@ -551,13 +565,21 @@ def test_desired_retention_scheduling():
         
         # Create card 2 (retention 0.99)
         db.set_setting('desired_retention', '0.99')
-        cur.execute("""
-            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ("retention_word_2", "保留率測試_2", db.format_datetime_for_db(datetime.now(timezone.utc)), 0, 0, None, None, None, 0, 0, 'recognize'))
-        c2_id = cur.lastrowid
-        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c2_id, deck_id))
-        conn.commit()
+        
+        conn = db.get_db_connection()
+        try:
+            with conn:
+                cur = conn.cursor()
+                now_str = db.format_datetime_for_db(datetime.now(timezone.utc))
+                yesterday_str = db.format_datetime_for_db(datetime.now(timezone.utc) - timedelta(days=1))
+                cur.execute("""
+                    INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ("retention_word_2", "保留率測試_2", now_str, 2, 0, 10.0, 5.0, yesterday_str, 1, 0, 'recognize'))
+                c2_id = cur.lastrowid
+                cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c2_id, deck_id))
+        finally:
+            conn.close()
         
         # Review card 2
         db.submit_card_review(c2_id, 3) # Rating: Good
@@ -578,18 +600,21 @@ def test_desired_retention_scheduling():
             db.set_setting('desired_retention', original_retention)
         else:
             conn = db.get_db_connection()
-            conn.execute("DELETE FROM settings WHERE key = 'desired_retention'")
-            conn.commit()
-            conn.close()
+            try:
+                with conn:
+                    conn.execute("DELETE FROM settings WHERE key = 'desired_retention'")
+            finally:
+                conn.close()
             
         # Clean up
         conn = db.get_db_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM cards WHERE front LIKE 'retention_word_%'")
-        cur.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
-        cur.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
-        conn.commit()
-        conn.close()
+        try:
+            with conn:
+                conn.execute("DELETE FROM cards WHERE front LIKE 'retention_word_%'")
+                conn.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
+                conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        finally:
+            conn.close()
         print("Retention Test clean up done.")
 
 if __name__ == "__main__":

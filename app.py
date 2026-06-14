@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
+from urllib.parse import urlparse, urljoin
+import os
 from config import Config
 import database as db
 from forms import FolderForm, DeckForm, CardForm, ImportForm, EmptyForm, ExamForm, ExamImportForm
@@ -8,6 +10,15 @@ app = Flask(__name__)
 app.config.from_object(Config)
 csrf = CSRFProtect(app)
 
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    flash('CSRF 驗證失敗，請重試或重新整理頁面。', 'danger')
+    return redirect(request.referrer or url_for('index'))
+
+def is_safe_url(target):
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 @app.context_processor
 def inject_empty_form():
     return dict(empty_form=EmptyForm())
@@ -60,11 +71,25 @@ def add_folder():
     if form.validate_on_submit():
         db.create_folder(form.name.data)
         flash('資料夾建立成功！', 'success')
+        return redirect(url_for('index'))
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'資料夾建立失敗: {error}', 'danger')
-    return redirect(url_for('index'))
+        db.process_expired_exams()
+        folders, unassigned_decks = db.get_folders_with_decks()
+        folders_all = db.get_all_folders()
+        deck_form = DeckForm()
+        deck_form.folders.choices = [(f['id'], f['name']) for f in folders_all]
+        decks_all = db.get_all_decks()
+        card_form = CardForm()
+        card_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+        import_form = ImportForm()
+        import_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+        all_exams = db.get_all_exams()
+        upcoming_exams = [e for e in all_exams if not e['is_expired'] and e['processed'] == 0]
+        today_stats = db.get_today_summary_stats()
+        return render_template('index.html', folders=folders, unassigned_decks=unassigned_decks, folder_form=form, deck_form=deck_form, card_form=card_form, import_form=import_form, upcoming_exams=upcoming_exams, today_stats=today_stats)
 
 @app.route('/folders/delete/<int:folder_id>', methods=['POST'])
 def delete_folder(folder_id):
@@ -72,6 +97,8 @@ def delete_folder(folder_id):
     if form.validate_on_submit():
         db.delete_folder(folder_id)
         flash('資料夾已刪除！', 'warning')
+    else:
+        flash('刪除失敗：CSRF 憑證無效或已過期，請重新整理頁面再試。', 'danger')
     return redirect(url_for('index'))
 
 @app.route('/decks/add', methods=['POST'])
@@ -83,11 +110,23 @@ def add_deck():
     if form.validate_on_submit():
         db.create_deck(form.name.data, form.folders.data)
         flash('牌組建立成功！', 'success')
+        return redirect(url_for('index'))
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'牌組建立失敗: {error}', 'danger')
-    return redirect(url_for('index'))
+        db.process_expired_exams()
+        folders, unassigned_decks = db.get_folders_with_decks()
+        folder_form = FolderForm()
+        decks_all = db.get_all_decks()
+        card_form = CardForm()
+        card_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+        import_form = ImportForm()
+        import_form.decks.choices = [(d['id'], d['name']) for d in decks_all]
+        all_exams = db.get_all_exams()
+        upcoming_exams = [e for e in all_exams if not e['is_expired'] and e['processed'] == 0]
+        today_stats = db.get_today_summary_stats()
+        return render_template('index.html', folders=folders, unassigned_decks=unassigned_decks, folder_form=folder_form, deck_form=form, card_form=card_form, import_form=import_form, upcoming_exams=upcoming_exams, today_stats=today_stats)
 
 @app.route('/decks/edit/<int:deck_id>', methods=['GET', 'POST'])
 def edit_deck(deck_id):
@@ -121,6 +160,8 @@ def delete_deck(deck_id):
     if form.validate_on_submit():
         db.delete_deck(deck_id)
         flash('牌組已刪除！', 'warning')
+    else:
+        flash('刪除失敗：CSRF 憑證無效或已過期，請重新整理頁面再試。', 'danger')
     return redirect(url_for('index'))
 
 # Cards Routing
@@ -179,11 +220,30 @@ def add_card():
             flash('單字已存在，釋義合併成功！', 'info')
         else:
             flash('單字卡建立成功！', 'success')
+        referrer = request.referrer
+        if referrer and is_safe_url(referrer):
+            return redirect(referrer)
+        return redirect(url_for('cards_list'))
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'建立失敗: {error}', 'danger')
-    return redirect(request.referrer or url_for('cards_list'))
+        search = request.args.get('search', '')
+        page = request.args.get('page', 1, type=int)
+        deck_id = request.args.get('deck_id', None, type=int)
+        limit = 20
+        current_deck = None
+        if deck_id:
+            conn = db.get_db_connection()
+            current_deck = conn.execute("SELECT * FROM decks WHERE id = ?", (deck_id,)).fetchone()
+            conn.close()
+        cards, total = db.get_all_cards_paged(search, page, limit, deck_id)
+        total_pages = (total + limit - 1) // limit
+        import_form = ImportForm()
+        import_form.decks.choices = form.decks.choices
+        if deck_id:
+            import_form.decks.data = [deck_id]
+        return render_template('cards.html', cards=cards, search=search, page=page, total_pages=total_pages, total=total, card_form=form, import_form=import_form, deck_id=deck_id, current_deck=current_deck)
 
 @app.route('/cards/edit/<int:card_id>', methods=['GET', 'POST'])
 def edit_card(card_id):
@@ -215,6 +275,8 @@ def delete_card(card_id):
     if form.validate_on_submit():
         db.delete_card(card_id)
         flash('記憶卡已刪除！', 'warning')
+    else:
+        flash('刪除失敗：CSRF 憑證無效或已過期，請重新整理頁面再試。', 'danger')
     return redirect(url_for('cards_list'))
 
 @app.route('/cards/import', methods=['POST'])
@@ -226,11 +288,30 @@ def import_csv():
     if form.validate_on_submit():
         imported, merged = db.import_csv_data(form.csv_text.data, form.decks.data, form.card_type.data)
         flash(f'匯入完成！新增: {imported} 筆，合併重複: {merged} 筆。', 'success')
+        referrer = request.referrer
+        if referrer and is_safe_url(referrer):
+            return redirect(referrer)
+        return redirect(url_for('cards_list'))
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'匯入失敗: {error}', 'danger')
-    return redirect(request.referrer or url_for('cards_list'))
+        search = request.args.get('search', '')
+        page = request.args.get('page', 1, type=int)
+        deck_id = request.args.get('deck_id', None, type=int)
+        limit = 20
+        current_deck = None
+        if deck_id:
+            conn = db.get_db_connection()
+            current_deck = conn.execute("SELECT * FROM decks WHERE id = ?", (deck_id,)).fetchone()
+            conn.close()
+        cards, total = db.get_all_cards_paged(search, page, limit, deck_id)
+        total_pages = (total + limit - 1) // limit
+        card_form = CardForm()
+        card_form.decks.choices = form.decks.choices
+        if deck_id:
+            card_form.decks.data = [deck_id]
+        return render_template('cards.html', cards=cards, search=search, page=page, total_pages=total_pages, total=total, card_form=card_form, import_form=form, deck_id=deck_id, current_deck=current_deck)
 
 # Study Routing
 
@@ -400,20 +481,19 @@ def add_exam():
     if form.validate_on_submit():
         if not form.decks.data and not form.folders.data:
             flash('建立失敗：必須至少選擇一個牌組或資料夾作為考試範圍！', 'danger')
+        else:
+            db.create_exam(form.name.data, form.date.data, form.decks.data, form.folders.data)
+            flash('考試行程建立成功，單字排程已自動調配！', 'success')
             return redirect(url_for('exams_list'))
-            
-        db.create_exam(
-            form.name.data,
-            form.date.data,
-            form.decks.data,
-            form.folders.data
-        )
-        flash('考試行程建立成功，單字排程已自動調配！', 'success')
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'建立失敗: {error}', 'danger')
-    return redirect(url_for('exams_list'))
+                
+    db.process_expired_exams()
+    exams = db.get_all_exams()
+    import_form = ExamImportForm()
+    return render_template('exams.html', exams=exams, form=form, import_form=import_form)
 
 @app.route('/exams/import', methods=['POST'])
 def import_exams():
@@ -422,13 +502,22 @@ def import_exams():
         imported = db.import_exams_csv(form.csv_text.data)
         if imported > 0:
             flash(f'成功匯入 {imported} 筆考試行程！相關單字排程已重新配置。', 'success')
+            return redirect(url_for('exams_list'))
         else:
             flash('匯入失敗：沒有可匯入的有效考試行程，請檢查格式或名稱是否正確。', 'danger')
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'匯入失敗: {error}', 'danger')
-    return redirect(url_for('exams_list'))
+                
+    db.process_expired_exams()
+    exams = db.get_all_exams()
+    folders = db.get_all_folders()
+    decks = db.get_all_decks()
+    exam_form = ExamForm()
+    exam_form.decks.choices = [(d['id'], d['name']) for d in decks]
+    exam_form.folders.choices = [(f['id'], f['name']) for f in folders]
+    return render_template('exams.html', exams=exams, form=exam_form, import_form=form)
 
 @app.route('/exams/delete/<int:exam_id>', methods=['POST'])
 def delete_exam(exam_id):
@@ -436,7 +525,10 @@ def delete_exam(exam_id):
     if form.validate_on_submit():
         db.delete_exam(exam_id)
         flash('考試行程已刪除！', 'warning')
+    else:
+        flash('刪除失敗：CSRF 憑證無效或已過期，請重新整理頁面再試。', 'danger')
     return redirect(url_for('exams_list'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000, debug=True)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1')
+    app.run(host='0.0.0.0', port=10000, debug=debug_mode)

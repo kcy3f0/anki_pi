@@ -14,40 +14,39 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+import re
+
 def parse_db_datetime(dt_str):
     if not dt_str:
         return None
     dt_str = dt_str.strip()
-    # Try parsing 'YYYY-MM-DDTHH:MM:SS.ffffff+00:00' or similar
-    if 'T' in dt_str:
-        # Normalize +00:00 or Z
-        if dt_str.endswith('+00:00'):
-            dt_str = dt_str[:-6]
-        elif dt_str.endswith('Z'):
-            dt_str = dt_str[:-1]
+    
+    tz_match = re.search(r'([+-]\d{2}:?\d{2}|Z)$', dt_str)
+    tz_part = tz_match.group(1) if tz_match else ""
+    if tz_part:
+        dt_str = dt_str[:-len(tz_part)]
         
-        # Handle decimal seconds if any
-        if '.' in dt_str:
-            base, micro = dt_str.split('.')
-            # Truncate micro to max 6 digits
-            micro = micro[:6]
-            dt_str = f"{base}.{micro}"
-            try:
-                return datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc)
-            except ValueError:
-                pass
+    if '.' in dt_str:
+        base, micro = dt_str.split('.')
+        micro = micro[:6]
+        dt_str = f"{base}.{micro}"
+        
+    try:
+        dt = datetime.fromisoformat(dt_str)
+        if tz_part == 'Z' or tz_part == '+00:00' or not tz_part:
+            return dt.replace(tzinfo=timezone.utc)
+        else:
+            tz_info = datetime.fromisoformat(f"2020-01-01T00:00:00{tz_part}").tzinfo
+            return dt.replace(tzinfo=tz_info).astimezone(timezone.utc)
+    except ValueError:
         try:
-            return datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc)
+            return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
-            try:
-                return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            except ValueError:
-                return None
-    else:
-        # Handle 'YYYY-MM-DD'
-        try:
-            return datetime.strptime(dt_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(dt_str, fmt).replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
             return None
 
 def format_datetime_for_db(dt):
@@ -55,41 +54,57 @@ def format_datetime_for_db(dt):
         return None
     return dt.isoformat()
 
+import threading
+
 def send_discord_message(content):
     url = Config.DISCORD_WEBHOOK_URL
     if not url:
         return
-    try:
-        requests.post(url, json={"content": content}, timeout=5)
-    except Exception as e:
-        print(f"Error sending Discord Webhook: {e}")
+    def run_send():
+        try:
+            requests.post(url, json={"content": content}, timeout=5)
+        except Exception as e:
+            print(f"Error sending Discord Webhook: {e}")
+    threading.Thread(target=run_send, daemon=True).start()
 
 # Folder and Deck CRUD
 
 def get_all_folders():
     conn = get_db_connection()
-    folders = conn.execute("SELECT * FROM folders").fetchall()
-    conn.close()
-    return folders
+    try:
+        return conn.execute("SELECT * FROM folders").fetchall()
+    finally:
+        conn.close()
 
 def get_all_decks():
     conn = get_db_connection()
-    decks = conn.execute("SELECT * FROM decks").fetchall()
-    conn.close()
-    return decks
+    try:
+        return conn.execute("SELECT * FROM decks").fetchall()
+    finally:
+        conn.close()
 
 def get_folders_with_decks():
     conn = get_db_connection()
     try:
-        # 1. Fetch folders
+        now = datetime.now(timezone.utc)
+        now_str = format_datetime_for_db(now)
+        
         folders = conn.execute("SELECT * FROM folders").fetchall()
         folder_list = []
         
-        now = datetime.now(timezone.utc)
+        stats_query = """
+            SELECT cd.deck_id, 
+                   SUM(CASE WHEN c.reps = 0 OR c.reps IS NULL THEN 1 ELSE 0 END) as new_count,
+                   SUM(CASE WHEN c.reps > 0 AND c.next_review <= ? THEN 1 ELSE 0 END) as due_count
+            FROM card_decks cd
+            JOIN cards c ON cd.card_id = c.id
+            GROUP BY cd.deck_id
+        """
+        stats_rows = conn.execute(stats_query, (now_str,)).fetchall()
+        deck_stats = {row['deck_id']: {"new_count": row['new_count'], "due_count": row['due_count']} for row in stats_rows}
         
         for f in folders:
             f_dict = dict(f)
-            # Fetch decks assigned to this folder
             decks = conn.execute("""
                 SELECT d.* FROM decks d
                 JOIN deck_folders df ON d.id = df.deck_id
@@ -99,15 +114,13 @@ def get_folders_with_decks():
             deck_list = []
             for d in decks:
                 d_dict = dict(d)
-                # Count card stats in this deck
-                stats = get_deck_card_stats(d['id'], now, conn=conn)
+                stats = deck_stats.get(d['id'], {"new_count": 0, "due_count": 0})
                 d_dict.update(stats)
                 deck_list.append(d_dict)
                 
             f_dict['decks'] = deck_list
             folder_list.append(f_dict)
             
-        # 2. Fetch unassigned decks (not in any folder)
         unassigned_decks = conn.execute("""
             SELECT d.* FROM decks d
             LEFT JOIN deck_folders df ON d.id = df.deck_id
@@ -117,43 +130,13 @@ def get_folders_with_decks():
         unassigned_list = []
         for d in unassigned_decks:
             d_dict = dict(d)
-            stats = get_deck_card_stats(d['id'], now, conn=conn)
+            stats = deck_stats.get(d['id'], {"new_count": 0, "due_count": 0})
             d_dict.update(stats)
             unassigned_list.append(d_dict)
             
         return folder_list, unassigned_list
     finally:
         conn.close()
-
-def get_deck_card_stats(deck_id, now, conn=None):
-    close_at_end = False
-    if conn is None:
-        conn = get_db_connection()
-        close_at_end = True
-    try:
-        # Fetch all cards in this deck
-        rows = conn.execute("""
-            SELECT c.reps, c.next_review FROM cards c
-            JOIN card_decks cd ON c.id = cd.card_id
-            WHERE cd.deck_id = ?
-        """, (deck_id,)).fetchall()
-    finally:
-        if close_at_end:
-            conn.close()
-    
-    new_count = 0
-    due_count = 0
-    for r in rows:
-        reps = r['reps'] or 0
-        next_review_str = r['next_review']
-        next_review = parse_db_datetime(next_review_str)
-        
-        if reps == 0:
-            new_count += 1
-        elif next_review and next_review <= now:
-            due_count += 1
-            
-    return {"new_count": new_count, "due_count": due_count}
 
 def create_folder(name):
     conn = get_db_connection()
@@ -166,25 +149,25 @@ def create_folder(name):
 
 def delete_folder(folder_id):
     conn = get_db_connection()
-    conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
-    conn.execute("DELETE FROM deck_folders WHERE folder_id = ?", (folder_id,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.execute("DELETE FROM deck_folders WHERE folder_id = ?", (folder_id,))
+            conn.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
+    finally:
+        conn.close()
 
 def create_deck(name, folder_ids=None):
     conn = get_db_connection()
     try:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO decks (name) VALUES (?)", (name,))
-        conn.commit()
-        deck_id = cur.lastrowid
-        
-        if folder_ids:
-            for fid in folder_ids:
-                cur.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, fid))
-            conn.commit()
+        with conn:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO decks (name) VALUES (?)", (name,))
+            deck_id = cur.lastrowid
             
-        return deck_id
+            if folder_ids:
+                for fid in folder_ids:
+                    cur.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, fid))
+            return deck_id
     finally:
         conn.close()
 
@@ -201,126 +184,124 @@ def update_deck(deck_id, name, folder_ids=None):
 
 def delete_deck(deck_id):
     conn = get_db_connection()
-    conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
-    conn.execute("DELETE FROM deck_folders WHERE deck_id = ?", (deck_id,))
-    conn.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.execute("DELETE FROM deck_folders WHERE deck_id = ?", (deck_id,))
+            conn.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
+            conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+            conn.execute("DELETE FROM cards WHERE id NOT IN (SELECT DISTINCT card_id FROM card_decks)")
+    finally:
+        conn.close()
 
 def get_deck_folders(deck_id):
     conn = get_db_connection()
-    rows = conn.execute("SELECT folder_id FROM deck_folders WHERE deck_id = ?", (deck_id,)).fetchall()
-    conn.close()
-    return [r['folder_id'] for r in rows]
+    try:
+        rows = conn.execute("SELECT folder_id FROM deck_folders WHERE deck_id = ?", (deck_id,)).fetchall()
+        return [r['folder_id'] for r in rows]
+    finally:
+        conn.close()
 
 # Card Management
 
 def get_all_cards_paged(search="", page=1, limit=50, deck_id=None):
     conn = get_db_connection()
-    offset = (page - 1) * limit
-    
-    if deck_id:
-        query = "SELECT c.* FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
-        params = [deck_id]
-        if search:
-            query += " AND (c.front LIKE ? OR c.back LIKE ?)"
-            params.extend([f"%{search}%", f"%{search}%"])
-    else:
-        query = "SELECT c.* FROM cards c"
-        params = []
-        if search:
-            query += " WHERE c.front LIKE ? OR c.back LIKE ?"
-            params.extend([f"%{search}%", f"%{search}%"])
+    try:
+        offset = (page - 1) * limit
         
-    query += " ORDER BY c.id DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
-    
-    cards = conn.execute(query, params).fetchall()
-    
-    # Total count
-    if deck_id:
-        count_query = "SELECT COUNT(*) FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
-        count_params = [deck_id]
-        if search:
-            count_query += " AND (c.front LIKE ? OR c.back LIKE ?)"
-            count_params.extend([f"%{search}%", f"%{search}%"])
-    else:
-        count_query = "SELECT COUNT(*) FROM cards"
-        count_params = []
-        if search:
-            count_query += " WHERE front LIKE ? OR back LIKE ?"
-            count_params.extend([f"%{search}%", f"%{search}%"])
+        if deck_id:
+            query = "SELECT c.* FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
+            params = [deck_id]
+            if search:
+                query += " AND (c.front LIKE ? OR c.back LIKE ?)"
+                params.extend([f"%{search}%", f"%{search}%"])
+        else:
+            query = "SELECT c.* FROM cards c"
+            params = []
+            if search:
+                query += " WHERE c.front LIKE ? OR c.back LIKE ?"
+                params.extend([f"%{search}%", f"%{search}%"])
             
-    total = conn.execute(count_query, count_params).fetchone()[0]
-    
-    # Get deck mapping for each card
-    card_list = []
-    for c in cards:
-        c_dict = dict(c)
-        decks = conn.execute("""
-            SELECT d.name FROM decks d
-            JOIN card_decks cd ON d.id = cd.deck_id
-            WHERE cd.card_id = ?
-        """, (c['id'],)).fetchall()
-        c_dict['deck_names'] = [d['name'] for d in decks]
-        card_list.append(c_dict)
+        query += " ORDER BY c.id DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
         
-    conn.close()
-    return card_list, total
+        cards = conn.execute(query, params).fetchall()
+        
+        if deck_id:
+            count_query = "SELECT COUNT(*) FROM cards c JOIN card_decks cd ON c.id = cd.card_id WHERE cd.deck_id = ?"
+            count_params = [deck_id]
+            if search:
+                count_query += " AND (c.front LIKE ? OR c.back LIKE ?)"
+                count_params.extend([f"%{search}%", f"%{search}%"])
+        else:
+            count_query = "SELECT COUNT(*) FROM cards"
+            count_params = []
+            if search:
+                count_query += " WHERE front LIKE ? OR back LIKE ?"
+                count_params.extend([f"%{search}%", f"%{search}%"])
+                
+        total = conn.execute(count_query, count_params).fetchone()[0]
+        
+        card_list = []
+        for c in cards:
+            c_dict = dict(c)
+            decks = conn.execute("""
+                SELECT d.name FROM decks d
+                JOIN card_decks cd ON d.id = cd.deck_id
+                WHERE cd.card_id = ?
+            """, (c['id'],)).fetchall()
+            c_dict['deck_names'] = [d['name'] for d in decks]
+            card_list.append(c_dict)
+            
+        return card_list, total
+    finally:
+        conn.close()
 
 def get_card_by_id(card_id):
     conn = get_db_connection()
-    row = conn.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
-    if row:
-        c_dict = dict(row)
-        decks = conn.execute("SELECT deck_id FROM card_decks WHERE card_id = ?", (card_id,)).fetchall()
-        c_dict['deck_ids'] = [d['deck_id'] for d in decks]
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
+        if row:
+            c_dict = dict(row)
+            decks = conn.execute("SELECT deck_id FROM card_decks WHERE card_id = ?", (card_id,)).fetchall()
+            c_dict['deck_ids'] = [d['deck_id'] for d in decks]
+            return c_dict
+        return None
+    finally:
         conn.close()
-        return c_dict
-    conn.close()
-    return None
 
 def add_card(front, back, card_type, deck_ids):
     conn = get_db_connection()
-    cur = conn.cursor()
-    
-    front = front.strip()
-    back = back.strip()
-    
-    # Check if duplicate front exists
-    existing = cur.execute("SELECT * FROM cards WHERE front = ?", (front,)).fetchone()
-    
-    if existing:
-        # Merge duplicates: append new back to existing back with double newline
-        merged_back = existing['back'] + "\n\n" + back
-        new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
-        cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
-        card_id = existing['id']
-        
-        # Link card to deck_ids if not already linked
-        for did in deck_ids:
-            link = cur.execute("SELECT 1 FROM card_decks WHERE card_id = ? AND deck_id = ?", (card_id, did)).fetchone()
-            if not link:
-                cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
-        conn.commit()
-        conn.close()
-        return card_id, True  # True means merged
-    else:
-        # Insert new card
-        now_str = format_datetime_for_db(datetime.now(timezone.utc))
-        cur.execute("""
-            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (front, back, now_str, 1, 0, None, None, None, 0, 0, card_type))
-        card_id = cur.lastrowid
-        
-        # Link card to deck_ids
-        for did in deck_ids:
-            cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
+    try:
+        with conn:
+            cur = conn.cursor()
+            front = front.strip()
+            back = back.strip()
             
-        conn.commit()
+            existing = cur.execute("SELECT * FROM cards WHERE front = ?", (front,)).fetchone()
+            
+            if existing:
+                merged_back = existing['back'] + "\n\n" + back
+                new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
+                cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
+                card_id = existing['id']
+                merged = True
+            else:
+                now_str = format_datetime_for_db(datetime.now(timezone.utc))
+                cur.execute("""
+                    INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (front, back, now_str, 0, 0, None, None, None, 0, 0, card_type))
+                card_id = cur.lastrowid
+                merged = False
+                
+            for did in deck_ids:
+                link = cur.execute("SELECT 1 FROM card_decks WHERE card_id = ? AND deck_id = ?", (card_id, did)).fetchone()
+                if not link:
+                    cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
+                    
+            return card_id, merged
+    finally:
         conn.close()
-        return card_id, False  # False means new
 
 def update_card(card_id, front, back, card_type, deck_ids):
     conn = get_db_connection()
@@ -349,60 +330,62 @@ def delete_card(card_id):
 
 # Batch CSV Import
 
+import io
+
 def import_csv_data(csv_text, deck_ids, card_type="recognize"):
     conn = get_db_connection()
-    cur = conn.cursor()
-    
-    reader = csv.reader(csv_text.strip().splitlines())
-    imported_count = 0
-    merged_count = 0
-    
-    now_str = format_datetime_for_db(datetime.now(timezone.utc))
-    
-    if card_type not in ["recognize", "spell"]:
-        card_type = "recognize"
-    
-    for row in reader:
-        if not row or len(row) < 2:
-            continue
-        front = row[0].strip()
-        back = row[1].strip()
-            
-        if not front or not back:
-            continue
-            
-        # Check duplicate
-        existing = cur.execute("SELECT * FROM cards WHERE front = ?", (front,)).fetchone()
-        
-        if existing:
-            merged_back = existing['back'] + "\n\n" + back
-            new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
-            cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
-            card_id = existing['id']
-            merged_count += 1
-        else:
-            cur.execute("""
-                INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (front, back, now_str, 1, 0, None, None, None, 0, 0, card_type))
-            card_id = cur.lastrowid
-            imported_count += 1
-            
-        # Link card to deck_ids
-        for did in deck_ids:
-            link = cur.execute("SELECT 1 FROM card_decks WHERE card_id = ? AND deck_id = ?", (card_id, did)).fetchone()
-            if not link:
-                cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
+    try:
+        with conn:
+            cur = conn.cursor()
+            try:
+                reader = csv.reader(io.StringIO(csv_text.strip()))
+            except csv.Error as e:
+                raise ValueError(f"CSV 格式解析失敗：{str(e)}")
                 
-    conn.commit()
-    conn.close()
-    
-    # Send Discord notification
-    if imported_count > 0 or merged_count > 0:
-        msg = f"📋 批次匯入成功！\n- 新增單字卡：{imported_count} 張\n- 合併重複卡：{merged_count} 張"
-        send_discord_message(msg)
-        
-    return imported_count, merged_count
+            imported_count = 0
+            merged_count = 0
+            now_str = format_datetime_for_db(datetime.now(timezone.utc))
+            if card_type not in ["recognize", "spell"]:
+                card_type = "recognize"
+            
+            for row in reader:
+                try:
+                    if not row or len(row) < 2:
+                        continue
+                    front = row[0].strip()
+                    back = row[1].strip()
+                    if not front or not back:
+                        continue
+                        
+                    existing = cur.execute("SELECT * FROM cards WHERE front = ?", (front,)).fetchone()
+                    if existing:
+                        merged_back = existing['back'] + "\n\n" + back
+                        new_card_type = 'spell' if (existing['card_type'] == 'spell' or card_type == 'spell') else (existing['card_type'] or 'recognize')
+                        cur.execute("UPDATE cards SET back = ?, card_type = ? WHERE id = ?", (merged_back, new_card_type, existing['id']))
+                        card_id = existing['id']
+                        merged_count += 1
+                    else:
+                        cur.execute("""
+                            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (front, back, now_str, 0, 0, None, None, None, 0, 0, card_type))
+                        card_id = cur.lastrowid
+                        imported_count += 1
+                        
+                    for did in deck_ids:
+                        link = cur.execute("SELECT 1 FROM card_decks WHERE card_id = ? AND deck_id = ?", (card_id, did)).fetchone()
+                        if not link:
+                            cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
+                except IndexError:
+                    raise ValueError("CSV 檔案中有些行缺少必要的欄位！")
+            
+        if imported_count > 0 or merged_count > 0:
+            msg = f"📋 批次匯入成功！\n- 新增單字卡：{imported_count} 張\n- 合併重複卡：{merged_count} 張"
+            send_discord_message(msg)
+            
+        return imported_count, merged_count
+    finally:
+        conn.close()
 
 # Spaced Repetition (FSRS) Study
 
@@ -527,140 +510,134 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
     return new_cards, due_cards
 
 def submit_card_review(card_id, rating_val):
-    """
-    Review a card using FSRS algorithm and update SQLite fields.
-    rating_val: 1=Again, 2=Hard, 3=Good, 4=Easy
-    """
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    row = cur.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
-    if not row:
-        conn.close()
-        return None
-        
-    # Map db row to fsrs.Card
-    card = Card()
-    card.state = State(row['state'])
-    card.step = row['step'] or 0
-    card.stability = row['stability']
-    card.difficulty = row['difficulty']
-    card.last_review = parse_db_datetime(row['last_review'])
-    card.due = parse_db_datetime(row['next_review'])
-    
-    # Initialize scheduler with dynamic desired retention
     retention_val = get_setting('desired_retention', '0.9')
+    conn = get_db_connection()
     try:
-        retention = float(retention_val)
-    except (ValueError, TypeError):
-        retention = 0.9
-    s = Scheduler(desired_retention=retention)
-    now = datetime.now(timezone.utc)
-    
-    # Calculate scheduling
-    new_card, review_log = s.review_card(card, Rating(rating_val), now)
-    
-    # Calculate reps and lapses
-    reps = (row['reps'] or 0) + 1
-    lapses = row['lapses'] or 0
-    if rating_val == 1: # Rating.Again
-        lapses += 1
-        
-    # Check if there is an upcoming exam for this card's decks/folders
-    earliest_exam_row = cur.execute("""
-        SELECT MIN(e.date) FROM exams e
-        WHERE e.date > ? AND e.processed = 0
-          AND (
-              e.id IN (
-                  SELECT exam_id FROM exam_decks
-                  WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
-              )
-              OR
-              e.id IN (
-                  SELECT exam_id FROM exam_folders
-                  WHERE folder_id IN (
-                      SELECT folder_id FROM deck_folders
-                      WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
+        with conn:
+            cur = conn.cursor()
+            
+            row = cur.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
+            if not row:
+                return None
+                
+            card = Card()
+            db_state = row['state']
+            reps = row['reps'] or 0
+            if reps == 0:
+                db_state = 0
+            card.state = State(db_state)
+            card.step = row['step'] or 0
+            card.stability = row['stability']
+            card.difficulty = row['difficulty']
+            card.last_review = parse_db_datetime(row['last_review'])
+            card.due = parse_db_datetime(row['next_review'])
+            
+            try:
+                retention = float(retention_val)
+            except (ValueError, TypeError):
+                retention = 0.9
+            s = Scheduler(desired_retention=retention)
+            now = datetime.now(timezone.utc)
+            
+            new_card, review_log = s.review_card(card, Rating(rating_val), now)
+            
+            reps = reps + 1
+            lapses = row['lapses'] or 0
+            if rating_val == 1:
+                lapses += 1
+                
+            earliest_exam_row = cur.execute("""
+                SELECT MIN(e.date) FROM exams e
+                WHERE e.date > ? AND e.processed = 0
+                  AND (
+                      e.id IN (
+                          SELECT exam_id FROM exam_decks
+                          WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
+                      )
+                      OR
+                      e.id IN (
+                          SELECT exam_id FROM exam_folders
+                          WHERE folder_id IN (
+                              SELECT folder_id FROM deck_folders
+                              WHERE deck_id IN (SELECT deck_id FROM card_decks WHERE card_id = ?)
+                          )
+                      )
                   )
-              )
-          )
-    """, (format_datetime_for_db(now), card_id, card_id)).fetchone()
-    
-    adjusted_due = new_card.due
-    if earliest_exam_row and earliest_exam_row[0]:
-        earliest_exam_date = parse_db_datetime(earliest_exam_row[0])
-        if adjusted_due >= earliest_exam_date:
-            capped_due = earliest_exam_date - timedelta(days=1)
-            if capped_due < now:
-                capped_due = now
-            adjusted_due = capped_due
+            """, (format_datetime_for_db(now), card_id, card_id)).fetchone()
+            
+            adjusted_due = new_card.due
+            if earliest_exam_row and earliest_exam_row[0]:
+                earliest_exam_date = parse_db_datetime(earliest_exam_row[0])
+                if adjusted_due >= earliest_exam_date:
+                    capped_due = earliest_exam_date - timedelta(days=1)
+                    if capped_due < now:
+                        capped_due = now
+                    adjusted_due = capped_due
 
-    # Format datetimes
-    last_review_str = format_datetime_for_db(new_card.last_review)
-    next_review_str = format_datetime_for_db(adjusted_due)
-    
-    cur.execute("""
-        UPDATE cards
-        SET state = ?, step = ?, stability = ?, difficulty = ?, last_review = ?, next_review = ?, reps = ?, lapses = ?
-        WHERE id = ?
-    """, (
-        new_card.state.value,
-        new_card.step,
-        new_card.stability,
-        new_card.difficulty,
-        last_review_str,
-        next_review_str,
-        reps,
-        lapses,
-        card_id
-    ))
-    
-    # Track setting stats or send discord webhook
-    conn.commit()
-    
-    # Fetch deck names for notification
-    decks = conn.execute("""
-        SELECT d.name FROM decks d
-        JOIN card_decks cd ON d.id = cd.deck_id
-        WHERE cd.card_id = ?
-    """, (card_id,)).fetchall()
-    deck_names = ", ".join([d['name'] for d in decks])
-    
-    conn.close()
-    
-    # Discord notification logic
-    rating_map = {1: "忘記 (Again)", 2: "困難 (Hard)", 3: "普通 (Good)", 4: "簡單 (Easy)"}
-    msg = f"🧠 記憶卡複習通知：\n- 單字：{row['front']}\n- 評分：{rating_map.get(rating_val, '未知')}\n- 牌組：{deck_names}\n- 下次複習時間：{next_review_str}"
-    send_discord_message(msg)
-    
-    return next_review_str
+            last_review_str = format_datetime_for_db(new_card.last_review)
+            next_review_str = format_datetime_for_db(adjusted_due)
+            
+            cur.execute("""
+                UPDATE cards
+                SET state = ?, step = ?, stability = ?, difficulty = ?, last_review = ?, next_review = ?, reps = ?, lapses = ?
+                WHERE id = ?
+            """, (
+                new_card.state.value,
+                new_card.step,
+                new_card.stability,
+                new_card.difficulty,
+                last_review_str,
+                next_review_str,
+                reps,
+                lapses,
+                card_id
+            ))
+            
+            decks = cur.execute("""
+                SELECT d.name FROM decks d
+                JOIN card_decks cd ON d.id = cd.deck_id
+                WHERE cd.card_id = ?
+            """, (card_id,)).fetchall()
+            deck_names = ", ".join([d['name'] for d in decks])
+            
+        rating_map = {1: "忘記 (Again)", 2: "困難 (Hard)", 3: "普通 (Good)", 4: "簡單 (Easy)"}
+        msg = f"🧠 記憶卡複習通知：\n- 單字：{row['front']}\n- 評分：{rating_map.get(rating_val, '未知')}\n- 牌組：{deck_names}\n- 下次複習時間：{next_review_str}"
+        send_discord_message(msg)
+        
+        return next_review_str
+    finally:
+        conn.close()
 
 # System/Settings Operations
 
 def reset_all_learning_progress():
     conn = get_db_connection()
-    now_str = format_datetime_for_db(datetime.now(timezone.utc))
-    conn.execute("""
-        UPDATE cards
-        SET state = 1, step = 0, stability = NULL, difficulty = NULL, last_review = NULL, next_review = ?, reps = 0, lapses = 0
-    """, (now_str,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            now_str = format_datetime_for_db(datetime.now(timezone.utc))
+            conn.execute("""
+                UPDATE cards
+                SET state = 0, step = 0, stability = NULL, difficulty = NULL, last_review = NULL, next_review = ?, reps = 0, lapses = 0
+            """, (now_str,))
+    finally:
+        conn.close()
     send_discord_message("⚠️ 所有記憶卡的學習進度已重置！")
 
 def delete_all_app_data():
     conn = get_db_connection()
-    conn.execute("DELETE FROM cards")
-    conn.execute("DELETE FROM card_decks")
-    conn.execute("DELETE FROM decks")
-    conn.execute("DELETE FROM folders")
-    conn.execute("DELETE FROM deck_folders")
-    conn.execute("DELETE FROM exams")
-    conn.execute("DELETE FROM exam_decks")
-    conn.execute("DELETE FROM exam_folders")
-    conn.execute("DELETE FROM sqlite_sequence") # Reset autoincrement ids
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.execute("DELETE FROM cards")
+            conn.execute("DELETE FROM card_decks")
+            conn.execute("DELETE FROM decks")
+            conn.execute("DELETE FROM folders")
+            conn.execute("DELETE FROM deck_folders")
+            conn.execute("DELETE FROM exams")
+            conn.execute("DELETE FROM exam_decks")
+            conn.execute("DELETE FROM exam_folders")
+            conn.execute("DELETE FROM sqlite_sequence")
+    finally:
+        conn.close()
     send_discord_message("🔥 所有卡片、牌組與資料夾的資料已被清空！")
 
 def get_setting(key, default=None):
@@ -687,122 +664,113 @@ def set_setting(key, value):
 
 def parse_input_datetime(date_str):
     try:
-        # Try ISO format
-        if 'T' in date_str:
-            dt = datetime.fromisoformat(date_str)
-        else:
-            dt = datetime.fromisoformat(date_str)
+        dt = datetime.fromisoformat(date_str.strip())
     except Exception:
         try:
-            # Try YYYY-MM-DD
             dt = datetime.strptime(date_str.strip()[:10], "%Y-%m-%d")
         except Exception:
             try:
-                # Try YYYY/MM/DD
                 dt = datetime.strptime(date_str.strip()[:10], "%Y/%m/%d")
             except Exception:
-                dt = datetime.now()
+                dt = datetime.now(timezone.utc)
                 
     if dt.tzinfo is None:
-        local_dt = dt.astimezone()
+        dt = dt.replace(tzinfo=timezone.utc)
     else:
-        local_dt = dt.astimezone()
+        dt = dt.astimezone(timezone.utc)
         
-    local_dt = local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    return local_dt.astimezone(timezone.utc)
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
 def distribute_exam_cards(exam_id):
     conn = get_db_connection()
     try:
-        cur = conn.cursor()
+        with conn:
+            cur = conn.cursor()
 
-        exam = cur.execute("SELECT date FROM exams WHERE id = ?", (exam_id,)).fetchone()
-        if not exam:
-            return
+            exam = cur.execute("SELECT date FROM exams WHERE id = ?", (exam_id,)).fetchone()
+            if not exam:
+                return
 
-        exam_date = parse_db_datetime(exam['date'])
-        if not exam_date:
-            return
+            exam_date = parse_db_datetime(exam['date'])
+            if not exam_date:
+                return
 
-        # Get all cards in scope
-        rows = cur.execute("""
-            SELECT id, reps, next_review FROM cards
-            WHERE id IN (
-                SELECT DISTINCT cd.card_id FROM card_decks cd
-                WHERE cd.deck_id IN (
-                    SELECT deck_id FROM exam_decks WHERE exam_id = ?
-                    UNION
-                    SELECT deck_id FROM deck_folders WHERE folder_id IN (
-                        SELECT folder_id FROM exam_folders WHERE exam_id = ?
+            rows = cur.execute("""
+                SELECT id, reps, next_review FROM cards
+                WHERE id IN (
+                    SELECT DISTINCT cd.card_id FROM card_decks cd
+                    WHERE cd.deck_id IN (
+                        SELECT deck_id FROM exam_decks WHERE exam_id = ?
+                        UNION
+                        SELECT deck_id FROM deck_folders WHERE folder_id IN (
+                            SELECT folder_id FROM exam_folders WHERE exam_id = ?
+                        )
                     )
                 )
-            )
-        """, (exam_id, exam_id)).fetchall()
+            """, (exam_id, exam_id)).fetchall()
 
-        now = datetime.now(timezone.utc)
-        total_days = (exam_date.date() - now.date()).days
+            now = datetime.now(timezone.utc)
+            total_days = (exam_date.date() - now.date()).days
 
-        if total_days <= 0:
-            return
+            if total_days <= 0:
+                return
 
-        # Separate new cards (reps=0) from reviewed-but-late cards (next_review > exam_date)
-        new_card_ids = []
-        late_card_ids = []
+            new_card_ids = []
+            late_card_ids = []
 
-        for r in rows:
-            reps = r['reps'] or 0
-            next_review = parse_db_datetime(r['next_review'])
+            for r in rows:
+                reps = r['reps'] or 0
+                next_review = parse_db_datetime(r['next_review'])
 
-            if reps == 0:
-                new_card_ids.append(r['id'])
-            elif next_review and next_review > exam_date:
-                late_card_ids.append(r['id'])
+                if reps == 0:
+                    new_card_ids.append(r['id'])
+                elif next_review and next_review > exam_date:
+                    late_card_ids.append(r['id'])
 
-        if not new_card_ids and not late_card_ids:
-            return
+            if not new_card_ids and not late_card_ids:
+                return
 
-        # Calculate days_for_new: all new cards must be seen 7 days before exam
-        cutoff_date = exam_date - timedelta(days=7)
-        days_to_cutoff = (cutoff_date.date() - now.date()).days
+            cutoff_date = exam_date - timedelta(days=7)
+            days_to_cutoff = (cutoff_date.date() - now.date()).days
 
-        if days_to_cutoff > 0:
-            days_for_new = days_to_cutoff
-        else:
-            # Already past cutoff, distribute across all remaining days
-            days_for_new = max(1, total_days)
+            if days_to_cutoff > 0:
+                days_for_new = days_to_cutoff
+            else:
+                days_for_new = max(1, total_days)
 
-        # Distribute new cards across the pre-cutoff window only
-        if new_card_ids:
-            random.shuffle(new_card_ids)
-            for i, card_id in enumerate(new_card_ids):
-                day_offset = i % days_for_new
-                jitter_minutes = random.randint(0, 60)
-                scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
+            updates = []
+            if new_card_ids:
+                random.shuffle(new_card_ids)
+                for i, card_id in enumerate(new_card_ids):
+                    day_offset = i % days_for_new
+                    jitter_minutes = random.randint(0, 60)
+                    scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
 
-                # Cap to cutoff or exam date
-                cap_date = cutoff_date if days_to_cutoff > 0 else exam_date
-                if scheduled_dt >= cap_date:
-                    scheduled_dt = cap_date - timedelta(minutes=1)
+                    cap_date = cutoff_date if days_to_cutoff > 0 else exam_date
+                    if scheduled_dt >= cap_date:
+                        scheduled_dt = cap_date - timedelta(minutes=1)
 
-                scheduled_str = format_datetime_for_db(scheduled_dt)
-                cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
+                    scheduled_str = format_datetime_for_db(scheduled_dt)
+                    updates.append((scheduled_str, card_id))
 
-        # Distribute late-reviewed cards across all remaining days before exam
-        if late_card_ids:
-            random.shuffle(late_card_ids)
-            slots = max(1, total_days)
-            for i, card_id in enumerate(late_card_ids):
-                day_offset = i % slots
-                jitter_minutes = random.randint(0, 60)
-                scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
+            if late_card_ids:
+                random.shuffle(late_card_ids)
+                slots = days_for_new
+                for i, card_id in enumerate(late_card_ids):
+                    day_offset = i % slots
+                    jitter_minutes = random.randint(0, 60)
+                    scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
 
-                if scheduled_dt >= exam_date:
-                    scheduled_dt = exam_date - timedelta(minutes=1)
+                    cap_date = cutoff_date if days_to_cutoff > 0 else exam_date
+                    if scheduled_dt >= cap_date:
+                        scheduled_dt = cap_date - timedelta(minutes=1)
 
-                scheduled_str = format_datetime_for_db(scheduled_dt)
-                cur.execute("UPDATE cards SET next_review = ? WHERE id = ?", (scheduled_str, card_id))
+                    scheduled_str = format_datetime_for_db(scheduled_dt)
+                    updates.append((scheduled_str, card_id))
 
-        conn.commit()
+            if updates:
+                cur.executemany("UPDATE cards SET next_review = ? WHERE id = ?", updates)
+
     finally:
         conn.close()
 
@@ -936,121 +904,117 @@ def get_all_exams():
 def create_exam(name, date_str, deck_ids=None, folder_ids=None):
     conn = get_db_connection()
     try:
-        cur = conn.cursor()
-        
-        utc_dt = parse_input_datetime(date_str)
-        date_formatted = format_datetime_for_db(utc_dt)
-        
-        cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name.strip(), date_formatted))
-        exam_id = cur.lastrowid
-        
-        if deck_ids:
-            for did in deck_ids:
-                cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
-                
-        if folder_ids:
-            for fid in folder_ids:
-                cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
-                
-        conn.commit()
-    finally:
-        conn.close()
-    
-    # Distribute vocabulary schedule for the new exam
-    distribute_exam_cards(exam_id)
-    
-    # Send Discord notification
-    msg = f"📅 新增考試行程通知：\n- 考試：{name.strip()}\n- 日期：{utc_dt.astimezone().strftime('%Y/%m/%d')}"
-    send_discord_message(msg)
-    
-    return exam_id
-
-def delete_exam(exam_id):
-    conn = get_db_connection()
-    # Fetch details for notification
-    exam = conn.execute("SELECT name FROM exams WHERE id = ?", (exam_id,)).fetchone()
-    conn.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
-    conn.commit()
-    conn.close()
-    if exam:
-        send_discord_message(f"🗑️ 考試行程已刪除：{exam['name']}")
-
-def import_exams_csv(csv_text):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    reader = csv.reader(csv_text.strip().splitlines())
-    imported_count = 0
-    
-    for row in reader:
-        if not row or len(row) < 4:
-            continue
+        with conn:
+            cur = conn.cursor()
+            utc_dt = parse_input_datetime(date_str)
+            date_formatted = format_datetime_for_db(utc_dt)
             
-        name = row[0].strip()
-        date_str = row[1].strip()
-        scope_type = row[2].strip().lower()
-        scope_name = row[3].strip()
-        
-        if not name or not date_str or not scope_name:
-            continue
-            
-        deck_ids = []
-        folder_ids = []
-        
-        if scope_type == 'deck':
-            deck = cur.execute("SELECT id FROM decks WHERE name = ?", (scope_name,)).fetchone()
-            if deck:
-                deck_ids.append(deck['id'])
-        elif scope_type == 'folder':
-            folder = cur.execute("SELECT id FROM folders WHERE name = ?", (scope_name,)).fetchone()
-            if folder:
-                folder_ids.append(folder['id'])
-                
-        if not deck_ids and not folder_ids:
-            continue
-            
-        utc_dt = parse_input_datetime(date_str)
-        date_formatted = format_datetime_for_db(utc_dt)
-        
-        existing = cur.execute("SELECT id FROM exams WHERE name = ? AND date = ?", (name, date_formatted)).fetchone()
-        
-        if existing:
-            exam_id = existing['id']
-            if deck_ids:
-                for did in deck_ids:
-                    link = cur.execute("SELECT 1 FROM exam_decks WHERE exam_id = ? AND deck_id = ?", (exam_id, did)).fetchone()
-                    if not link:
-                        cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
-            if folder_ids:
-                for fid in folder_ids:
-                    link = cur.execute("SELECT 1 FROM exam_folders WHERE exam_id = ? AND folder_id = ?", (exam_id, fid)).fetchone()
-                    if not link:
-                        cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
-        else:
-            cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name, date_formatted))
+            cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name.strip(), date_formatted))
             exam_id = cur.lastrowid
             
             if deck_ids:
                 for did in deck_ids:
                     cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+                    
             if folder_ids:
                 for fid in folder_ids:
                     cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+    finally:
+        conn.close()
+    
+    distribute_exam_cards(exam_id)
+    msg = f"📅 新增考試行程通知：\n- 考試：{name.strip()}\n- 日期：{utc_dt.astimezone().strftime('%Y/%m/%d')}"
+    send_discord_message(msg)
+    return exam_id
+
+def delete_exam(exam_id):
+    conn = get_db_connection()
+    try:
+        with conn:
+            exam = conn.execute("SELECT name FROM exams WHERE id = ?", (exam_id,)).fetchone()
+            conn.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
+    finally:
+        conn.close()
+    if exam:
+        send_discord_message(f"🗑️ 考試行程已刪除：{exam['name']}")
+
+def import_exams_csv(csv_text):
+    conn = get_db_connection()
+    try:
+        with conn:
+            cur = conn.cursor()
+            reader = csv.reader(csv_text.strip().splitlines())
+            imported_count = 0
+            
+            for row in reader:
+                if not row or len(row) < 4:
+                    continue
                     
-        conn.commit()
-        imported_count += 1
-        
-    conn.close()
+                name = row[0].strip()
+                date_str = row[1].strip()
+                scope_type = row[2].strip().lower()
+                scope_name = row[3].strip()
+                
+                if not name or not date_str or not scope_name:
+                    continue
+                    
+                deck_ids = []
+                folder_ids = []
+                
+                if scope_type == 'deck':
+                    deck = cur.execute("SELECT id FROM decks WHERE name = ?", (scope_name,)).fetchone()
+                    if deck:
+                        deck_ids.append(deck['id'])
+                elif scope_type == 'folder':
+                    folder = cur.execute("SELECT id FROM folders WHERE name = ?", (scope_name,)).fetchone()
+                    if folder:
+                        folder_ids.append(folder['id'])
+                        
+                if not deck_ids and not folder_ids:
+                    continue
+                    
+                utc_dt = parse_input_datetime(date_str)
+                date_formatted = format_datetime_for_db(utc_dt)
+                
+                existing = cur.execute("SELECT id FROM exams WHERE name = ? AND date = ?", (name, date_formatted)).fetchone()
+                
+                if existing:
+                    exam_id = existing['id']
+                    if deck_ids:
+                        for did in deck_ids:
+                            link = cur.execute("SELECT 1 FROM exam_decks WHERE exam_id = ? AND deck_id = ?", (exam_id, did)).fetchone()
+                            if not link:
+                                cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+                    if folder_ids:
+                        for fid in folder_ids:
+                            link = cur.execute("SELECT 1 FROM exam_folders WHERE exam_id = ? AND folder_id = ?", (exam_id, fid)).fetchone()
+                            if not link:
+                                cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+                else:
+                    cur.execute("INSERT INTO exams (name, date) VALUES (?, ?)", (name, date_formatted))
+                    exam_id = cur.lastrowid
+                    
+                    if deck_ids:
+                        for did in deck_ids:
+                            cur.execute("INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)", (exam_id, did))
+                    if folder_ids:
+                        for fid in folder_ids:
+                            cur.execute("INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)", (exam_id, fid))
+                            
+                imported_count += 1
+    finally:
+        conn.close()
     
     if imported_count > 0:
         conn = get_db_connection()
-        unprocessed = conn.execute("SELECT id FROM exams WHERE processed = 0").fetchall()
-        for r in unprocessed:
+        try:
+            unprocessed = conn.execute("SELECT id FROM exams WHERE processed = 0").fetchall()
+        finally:
             conn.close()
+            
+        for r in unprocessed:
             distribute_exam_cards(r['id'])
-            conn = get_db_connection()
-        conn.close()
-        
+            
         send_discord_message(f"📋 批次匯入考試行程成功！共匯入 {imported_count} 筆考試。")
         
     return imported_count

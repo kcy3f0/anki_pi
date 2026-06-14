@@ -8,6 +8,7 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv/
 
 # Databases
 flashcards.db
@@ -17,3 +18,14 @@ flashcards.db
 # OS files
 .DS_Store
 Thumbs.db
+
+# Testing
+.pytest_cache/
+
+# AI & Tools
+.agents/
+.specify/
+
+# IDEs
+.vscode/
+.idea/

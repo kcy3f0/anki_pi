@@ -477,7 +477,6 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
 
     # Query exam date before closing connection
     earliest_exam_date = _get_earliest_exam_date(conn, deck_id, folder_id, now, exam_id=exam_id)
-    conn.close()
 
     new_cards = []
     due_cards = []
@@ -507,10 +506,40 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
                 # Past cutoff: distribute across all remaining days before exam
                 days_for_new = max(1, total_days)
 
-            today_new_count = math.ceil(len(new_cards) / days_for_new)
+            date_str = now.strftime('%Y-%m-%d')
+            if deck_id:
+                scope_key = f"deck_{deck_id}"
+            elif folder_id:
+                scope_key = f"folder_{folder_id}"
+            elif exam_id:
+                scope_key = f"exam_{exam_id}"
+            else:
+                scope_key = "all"
+                
+            setting_key = f"daily_new_{scope_key}_{date_str}"
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (setting_key,)).fetchone()
+            
+            current_new = len(new_cards)
+            start_count = current_new
+            
+            if row:
+                start_count = int(row['value'])
+                if current_new > start_count:
+                    start_count = current_new
+                    conn.execute("UPDATE settings SET value = ? WHERE key = ?", (str(start_count), setting_key))
+                    conn.commit()
+            else:
+                conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (setting_key, str(start_count)))
+                conn.commit()
+
+            quota = math.ceil(start_count / days_for_new)
+            learned_today = start_count - current_new
+            today_new_count = max(0, quota - learned_today)
+
             random.shuffle(new_cards)
             new_cards = new_cards[:today_new_count]
 
+    conn.close()
     return new_cards, due_cards
 
 def submit_card_review(card_id, rating_val):

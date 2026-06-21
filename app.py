@@ -427,7 +427,21 @@ def settings():
     except (ValueError, TypeError):
         retention = 0.9
         
-    return render_template('settings.html', desired_retention=retention)
+    weights_val = db.get_setting('fsrs_weights', '預設 (尚未最佳化)')
+    return render_template('settings.html', desired_retention=retention, fsrs_weights=weights_val)
+
+@app.route('/settings/optimize-fsrs', methods=['POST'])
+def optimize_fsrs():
+    form = EmptyForm()
+    if form.validate_on_submit():
+        success, msg = db.optimize_fsrs_parameters()
+        if success:
+            flash(msg, 'success')
+        else:
+            flash(msg, 'danger')
+    else:
+        flash('CSRF 驗證失敗', 'danger')
+    return redirect(url_for('settings'))
 
 @app.route('/settings/reset-progress', methods=['POST'])
 def reset_progress():

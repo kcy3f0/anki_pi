@@ -54,6 +54,18 @@ def format_datetime_for_db(dt):
         return None
     return dt.isoformat()
 
+def get_day_cutoff_utc(tz_offset_hours=8, rollover_hour=4):
+    now_utc = datetime.now(timezone.utc)
+    local_tz = timezone(timedelta(hours=tz_offset_hours))
+    now_local = now_utc.astimezone(local_tz)
+    
+    if now_local.hour < rollover_hour:
+        cutoff_local = now_local.replace(hour=rollover_hour, minute=0, second=0, microsecond=0)
+    else:
+        cutoff_local = (now_local + timedelta(days=1)).replace(hour=rollover_hour, minute=0, second=0, microsecond=0)
+        
+    return cutoff_local.astimezone(timezone.utc)
+
 import threading
 
 def send_discord_message(content):
@@ -480,6 +492,7 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
 
     new_cards = []
     due_cards = []
+    day_cutoff_utc = get_day_cutoff_utc()
 
     for r in rows:
         c_dict = dict(r)
@@ -489,8 +502,15 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
 
         if reps == 0:
             new_cards.append(c_dict)
-        elif next_review and next_review <= now:
-            due_cards.append(c_dict)
+        else:
+            db_state = r['state']
+            if db_state in (1, 3):  # Learning = 1, Relearning = 3
+                is_due = next_review and next_review <= now
+            else:  # Review = 2 (or other states)
+                is_due = next_review and next_review <= day_cutoff_utc
+            
+            if is_due:
+                due_cards.append(c_dict)
 
     # Dynamically limit new cards based on exam schedule
     if earliest_exam_date and new_cards:
@@ -618,9 +638,8 @@ def submit_card_review(card_id, rating_val):
                 earliest_exam_date = parse_db_datetime(earliest_exam_row[0])
                 if adjusted_due >= earliest_exam_date:
                     capped_due = earliest_exam_date - timedelta(days=1)
-                    if capped_due < now:
-                        capped_due = now
-                    adjusted_due = capped_due
+                    if capped_due >= now:
+                        adjusted_due = capped_due
 
             last_review_str = format_datetime_for_db(new_card.last_review)
             next_review_str = format_datetime_for_db(adjusted_due)

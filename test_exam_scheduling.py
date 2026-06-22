@@ -617,6 +617,95 @@ def test_desired_retention_scheduling():
             conn.close()
         print("Retention Test clean up done.")
 
+def test_fsrs_scheduling_fixes():
+    print("=== Starting FSRS Scheduling Fixes Test ===")
+    
+    # 1. Setup Test Deck and Cards
+    conn = db.get_db_connection()
+    cur = conn.cursor()
+    
+    # Create test deck
+    cur.execute("INSERT INTO decks (name) VALUES (?)", ("Test Rollover Deck",))
+    deck_id = cur.lastrowid
+    
+    # Add a dummy card for Exam Capping
+    cur.execute("""
+        INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, ("capping_word", "測試單字_capping", db.format_datetime_for_db(datetime.now(timezone.utc)), 2, 0, 2.0, 5.0, None, 1, 0, 'recognize'))
+    cap_card_id = cur.lastrowid
+    cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (cap_card_id, deck_id))
+    
+    conn.commit()
+    conn.close()
+    
+    try:
+        # Create an exam scheduled for tomorrow morning (12 hours from now)
+        now = datetime.now(timezone.utc)
+        exam_date = now + timedelta(hours=12)
+        exam_id = db.create_exam("Tomorrow Exam", exam_date.isoformat(), deck_ids=[deck_id])
+        
+        # Now review the card.
+        next_review_str = db.submit_card_review(cap_card_id, 3) # Good
+        next_review_dt = db.parse_db_datetime(next_review_str)
+        
+        # Verify it is not capped to now
+        time_diff = abs((next_review_dt - now).total_seconds())
+        assert time_diff > 10, f"Card was capped to now (diff: {time_diff}s)!"
+        print("[PASS] Verification successful: Exam capping bug is fixed.")
+        
+        # Clean up the exam
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
+        conn.execute("DELETE FROM exam_decks WHERE exam_id = ?", (exam_id,))
+        conn.commit()
+        conn.close()
+        
+        # 2. Test Rollover Cutoff for Review cards
+        conn = db.get_db_connection()
+        cur = conn.cursor()
+        
+        # Card A (Review, due in 2 hours)
+        future_today = now + timedelta(hours=2)
+        cur.execute("""
+            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("review_future_today", "測試_A", db.format_datetime_for_db(future_today), 2, 0, 2.0, 5.0, db.format_datetime_for_db(now), 1, 0, 'recognize'))
+        card_a_id = cur.lastrowid
+        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_a_id, deck_id))
+        
+        # Card B (Learning, due in 10 minutes)
+        learning_future = now + timedelta(minutes=10)
+        cur.execute("""
+            INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("learning_future", "測試_B", db.format_datetime_for_db(learning_future), 1, 0, 2.0, 5.0, db.format_datetime_for_db(now), 1, 0, 'recognize'))
+        card_b_id = cur.lastrowid
+        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_b_id, deck_id))
+        
+        conn.commit()
+        conn.close()
+        
+        # Get study cards
+        new_cards, due_cards = db.get_study_cards(deck_id=deck_id)
+        due_ids = [c['id'] for c in due_cards]
+        
+        # Card A (Review) should be due because it's due within today's rollover limit
+        # Card B (Learning) should NOT be due because it requires waiting 10 minutes
+        assert card_a_id in due_ids, "Review card scheduled for later today is not due!"
+        assert card_b_id not in due_ids, "Learning card scheduled for 10 minutes from now is due prematurely!"
+        print("[PASS] Verification successful: Rollover due logic behaves correctly.")
+        
+    finally:
+        # Clean up
+        conn = db.get_db_connection()
+        conn.execute("DELETE FROM cards WHERE id IN (SELECT card_id FROM card_decks WHERE deck_id = ?)", (deck_id,))
+        conn.execute("DELETE FROM card_decks WHERE deck_id = ?", (deck_id,))
+        conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        conn.commit()
+        conn.close()
+        print("FSRS Scheduling Fixes Test clean up done.")
+
 if __name__ == "__main__":
     test_exam_scheduling()
     test_exam_scheduling_new_cards_cutoff()
@@ -624,3 +713,4 @@ if __name__ == "__main__":
     test_today_counters()
     test_card_type_merging()
     test_desired_retention_scheduling()
+    test_fsrs_scheduling_fixes()

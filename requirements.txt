@@ -3,4 +3,3 @@ Flask-WTF>=1.2.0
 python-dotenv>=1.0.0
 fsrs>=6.0.0
 requests>=2.31.0
-fsrs-optimizer>=5.0.0

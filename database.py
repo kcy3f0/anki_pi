@@ -1196,54 +1196,28 @@ def get_today_summary_stats():
         "today_total": today_total
     }
 
-def optimize_fsrs_parameters():
-    try:
-        from fsrs_optimizer import Optimizer
-        import pandas as pd
-        import time
-        import os
-    except ImportError:
-        return False, "無法載入 FSRS Optimizer (請確定已安裝 fsrs-optimizer 等套件)"
-        
+def get_revlog_csv_string():
+    import csv
+    import io
+    import time
+    
     conn = get_db_connection()
     try:
         rows = conn.execute("SELECT card_id, review_time, review_rating, review_state, review_duration FROM revlog ORDER BY card_id, review_time").fetchall()
-        if len(rows) < 10:
-            return False, "複習歷史數據過少（建議至少要有 10 筆以上的複習紀錄才能進行最佳化）"
-            
-        data = []
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["card_id", "review_time", "review_rating", "review_state", "review_duration"])
+        
         for r in rows:
             dt = parse_db_datetime(r['review_time'])
             ts_ms = int(dt.timestamp() * 1000) if dt else int(time.time() * 1000)
-            data.append({
-                "card_id": r['card_id'],
-                "review_time": ts_ms,
-                "review_rating": r['review_rating'],
-                "review_state": r['review_state'],
-                "review_duration": r['review_duration']
-            })
+            writer.writerow([r['card_id'], ts_ms, r['review_rating'], r['review_state'], r['review_duration']])
             
-        df = pd.DataFrame(data)
-        csv_path = "revlog.csv"
-        df.to_csv(csv_path, index=False)
-        
-        optimizer = Optimizer()
-        optimizer.create_time_series("UTC", "2000-01-01", 4)
-        optimizer.pretrain(verbose=False)
-        optimizer.train(verbose=False)
-        
-        if hasattr(optimizer, 'w') and optimizer.w is not None:
-            weights = optimizer.w
-            if len(weights) == 21:
-                weights_str = ",".join([str(round(w, 4)) for w in weights])
-                set_setting("fsrs_weights", weights_str)
-                if os.path.exists(csv_path):
-                    os.remove(csv_path)
-                return True, "最佳化完成！已套用新的自訂參數。"
-        return False, "最佳化失敗或產出的參數數量不正確。"
-            
+        return output.getvalue()
     except Exception as e:
-        return False, f"最佳化發生錯誤: {str(e)}"
+        print(f"Error generating CSV: {e}")
+        return ""
     finally:
         conn.close()
 

@@ -430,15 +430,30 @@ def settings():
     weights_val = db.get_setting('fsrs_weights', '預設 (尚未最佳化)')
     return render_template('settings.html', desired_retention=retention, fsrs_weights=weights_val)
 
-@app.route('/settings/optimize-fsrs', methods=['POST'])
-def optimize_fsrs():
+@app.route('/settings/export-revlog')
+def export_revlog():
+    from flask import Response
+    csv_data = db.get_revlog_csv_string()
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=revlog.csv"}
+    )
+
+@app.route('/settings/update-weights', methods=['POST'])
+def update_weights():
     form = EmptyForm()
     if form.validate_on_submit():
-        success, msg = db.optimize_fsrs_parameters()
-        if success:
-            flash(msg, 'success')
-        else:
-            flash(msg, 'danger')
+        weights = request.form.get('fsrs_weights', '')
+        try:
+            w_list = [float(x.strip()) for x in weights.split(',')]
+            if len(w_list) in (17, 19, 21):
+                db.set_setting('fsrs_weights', weights.strip())
+                flash('FSRS 參數已更新！', 'success')
+            else:
+                flash(f'參數數量不正確 ({len(w_list)})。FSRS 參數通常為 17, 19 或 21 個數值。', 'danger')
+        except ValueError:
+            flash('參數格式錯誤，必須是逗號分隔的數值。', 'danger')
     else:
         flash('CSRF 驗證失敗', 'danger')
     return redirect(url_for('settings'))

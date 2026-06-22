@@ -32,18 +32,21 @@
             <hr class="settings-divider" style="margin: 30px 0; border: none; border-top: 1px solid var(--border);">
 
             <div class="action-desc" style="margin-bottom: 20px;">
-                <h3 style="margin-bottom: 8px; font-size: 1.1rem; font-weight: 600;">參數最佳化 (Optimize Parameters)</h3>
+                <h3 style="margin-bottom: 8px; font-size: 1.1rem; font-weight: 600;">自訂參數 (Custom Parameters)</h3>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                    透過機器學習分析您過去的真實複習紀錄，計算出最適合您的 FSRS 權重參數。建議至少累積數十筆歷史數據後再進行最佳化，以獲得更準確的預測。<br>
-                    目前套用的參數：<br>
-                    <code style="display: block; margin-top: 10px; padding: 10px; background-color: var(--surface-hover); border-radius: 6px; word-break: break-all; font-size: 0.85rem; color: var(--text); border: 1px solid var(--border);">{{ fsrs_weights }}</code>
+                    您可以下載複習紀錄 (revlog.csv) 並在電腦上使用 FSRS Optimizer 算出最佳權重，再將結果貼在下方。<br>
+                    <a href="{{ url_for('export_revlog') }}" class="btn btn-secondary" style="display: inline-block; margin-top: 10px; padding: 6px 12px; font-size: 0.85rem; border: 1px solid var(--border); border-radius: var(--radius-sm);"><i class="fa-solid fa-download"></i> 下載 revlog.csv</a>
                 </p>
             </div>
             
-            <form action="{{ url_for('optimize_fsrs') }}" method="POST" onsubmit="document.getElementById('optimize-btn').disabled = true; document.getElementById('optimize-btn').innerHTML = '<i class=\'fa-solid fa-spinner fa-spin\' style=\'margin-right: 6px;\'></i> 背景訓練最佳化中...這可能需要幾十秒鐘';">
+            <form action="{{ url_for('update_weights') }}" method="POST">
                 {{ empty_form.csrf_token }}
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="fsrs_weights" style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.95rem;">目前的 FSRS 參數：</label>
+                    <textarea id="fsrs_weights" name="fsrs_weights" class="form-control" rows="3" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-family: monospace; font-size: 0.85rem;" placeholder="例如: 0.4,0.9,2.3,10.9,...">{{ fsrs_weights }}</textarea>
+                </div>
                 <div style="display: flex; justify-content: flex-end;">
-                    <button id="optimize-btn" type="submit" class="btn btn-secondary" style="padding: 10px 20px; font-weight: 500; font-size: 0.95rem; border-radius: var(--radius-sm); border: 1px solid var(--border);"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right: 6px;"></i> 執行最佳化</button>
+                    <button type="submit" class="btn btn-secondary" style="padding: 10px 20px; font-weight: 500; font-size: 0.95rem; border-radius: var(--radius-sm); border: 1px solid var(--border);"><i class="fa-solid fa-floppy-disk" style="margin-right: 6px;"></i> 更新參數</button>
                 </div>
             </form>
         </div>

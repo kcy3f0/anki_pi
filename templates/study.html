@@ -167,8 +167,8 @@
                 shuffleArray(dueQueue);
                 shuffleArray(newQueue);
                 
-                // Active queue: due cards first, then new cards
-                activeQueue = [...dueQueue, ...newQueue];
+                // Active queue: new cards first, then due cards
+                activeQueue = [...newQueue, ...dueQueue];
                 
                 updateProgressUI();
                 showNextCard();

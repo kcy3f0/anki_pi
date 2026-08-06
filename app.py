@@ -171,7 +171,7 @@ def cards_list():
     search = request.args.get('search', '')
     page = request.args.get('page', 1, type=int)
     deck_id = request.args.get('deck_id', None, type=int)
-    limit = 20
+    limit = 999999
     
     current_deck = None
     if deck_id:
@@ -231,7 +231,7 @@ def add_card():
         search = request.args.get('search', '')
         page = request.args.get('page', 1, type=int)
         deck_id = request.args.get('deck_id', None, type=int)
-        limit = 20
+        limit = 999999
         current_deck = None
         if deck_id:
             conn = db.get_db_connection()
@@ -299,7 +299,7 @@ def import_csv():
         search = request.args.get('search', '')
         page = request.args.get('page', 1, type=int)
         deck_id = request.args.get('deck_id', None, type=int)
-        limit = 20
+        limit = 999999
         current_deck = None
         if deck_id:
             conn = db.get_db_connection()

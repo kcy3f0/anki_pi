@@ -152,12 +152,13 @@ def get_folders_with_decks():
 
 def create_folder(name):
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO folders (name) VALUES (?)", (name,))
-    conn.commit()
-    folder_id = cur.lastrowid
-    conn.close()
-    return folder_id
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO folders (name) VALUES (?)", (name,))
+            return cur.lastrowid
+    finally:
+        conn.close()
 
 def delete_folder(folder_id):
     conn = get_db_connection()
@@ -319,21 +320,21 @@ def add_card(front, back, card_type, deck_ids):
 
 def update_card(card_id, front, back, card_type, deck_ids):
     conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        UPDATE cards 
-        SET front = ?, back = ?, card_type = ?
-        WHERE id = ?
-    """, (front.strip(), back.strip(), card_type, card_id))
-    
-    # Update deck associations
-    cur.execute("DELETE FROM card_decks WHERE card_id = ?", (card_id,))
-    for did in deck_ids:
-        cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
-        
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE cards 
+                SET front = ?, back = ?, card_type = ?
+                WHERE id = ?
+            """, (front.strip(), back.strip(), card_type, card_id))
+            
+            # Update deck associations
+            cur.execute("DELETE FROM card_decks WHERE card_id = ?", (card_id,))
+            for did in deck_ids:
+                cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
+    finally:
+        conn.close()
 
 def delete_card(card_id):
     conn = get_db_connection()
@@ -636,6 +637,8 @@ def submit_card_review(card_id, rating_val):
             adjusted_due = new_card.due
             if earliest_exam_row and earliest_exam_row[0]:
                 earliest_exam_date = parse_db_datetime(earliest_exam_row[0])
+                if adjusted_due.tzinfo is None:
+                    adjusted_due = adjusted_due.replace(tzinfo=timezone.utc)
                 if adjusted_due >= earliest_exam_date:
                     capped_due = earliest_exam_date - timedelta(days=1)
                     if capped_due >= now:
@@ -743,7 +746,7 @@ def parse_input_datetime(date_str):
             try:
                 dt = datetime.strptime(date_str.strip()[:10], "%Y/%m/%d")
             except Exception:
-                dt = datetime.now(timezone.utc)
+                raise ValueError(f"無法解析日期格式，請使用 ISO (YYYY-MM-DD) 格式。輸入值：{date_str}")
                 
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -875,8 +878,11 @@ def process_expired_exams():
             
             # If there are decks, check overlapping upcoming exams
             if expired_deck_ids:
+                remaining_decks = set(expired_deck_ids)
                 upcoming = cur.execute("SELECT id FROM exams WHERE date > ? AND processed = 0 ORDER BY date ASC", (now_str,)).fetchall()
                 for u_row in upcoming:
+                    if not remaining_decks:
+                        break
                     u_id = u_row['id']
                     u_decks = cur.execute("""
                         SELECT deck_id FROM exam_decks WHERE exam_id = ?
@@ -887,10 +893,12 @@ def process_expired_exams():
                     """, (u_id, u_id)).fetchall()
                     u_deck_ids = [d['deck_id'] for d in u_decks]
                     
-                    # Check overlap
-                    if any(d in expired_deck_ids for d in u_deck_ids):
-                        exams_to_distribute.append(u_id)
-                        break
+                    overlap = [d for d in u_deck_ids if d in remaining_decks]
+                    if overlap:
+                        if u_id not in exams_to_distribute:
+                            exams_to_distribute.append(u_id)
+                        for d in overlap:
+                            remaining_decks.remove(d)
     finally:
         conn.close()
         
@@ -1015,7 +1023,10 @@ def import_exams_csv(csv_text):
     try:
         with conn:
             cur = conn.cursor()
-            reader = csv.reader(csv_text.strip().splitlines())
+            try:
+                reader = csv.reader(io.StringIO(csv_text.strip()))
+            except csv.Error as e:
+                raise ValueError(f"CSV 格式解析失敗：{str(e)}")
             imported_count = 0
             
             for row in reader:

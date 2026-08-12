@@ -23,7 +23,7 @@ def test_exam_scheduling():
         cur.execute("""
             INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (f"test_word_{i}", f"測試單字_{i}", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+        """, (f"test_word_{i}", f"測試單字_{i}", now_str, 0, 0, None, None, None, 0, 0, 'recognize'))
         card_id = cur.lastrowid
         card_ids.append(card_id)
         cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, deck_id))
@@ -161,7 +161,7 @@ def test_exam_scheduling_new_cards_cutoff():
         cur.execute("""
             INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (f"cutoff_new_{i}", f"測試新卡_{i}", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+        """, (f"cutoff_new_{i}", f"測試新卡_{i}", now_str, 0, 0, None, None, None, 0, 0, 'recognize'))
         card_id = cur.lastrowid
         new_card_ids.append(card_id)
         cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, deck_id))
@@ -318,7 +318,7 @@ def test_study_cards_by_exam_id():
         cur.execute("""
             INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (f"exam_id_word_{i}", f"測試單字_{i}", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+        """, (f"exam_id_word_{i}", f"測試單字_{i}", now_str, 0, 0, None, None, None, 0, 0, 'recognize'))
         card_id = cur.lastrowid
         card_ids.append(card_id)
         cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, deck_id))
@@ -375,7 +375,7 @@ def test_today_counters():
     cur.execute("""
         INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, ("today_exam_w1", "測試考試單字1", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+    """, ("today_exam_w1", "測試考試單字1", now_str, 0, 0, None, None, None, 0, 0, 'recognize'))
     c_exam_id = cur.lastrowid
     cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c_exam_id, deck_exam_id))
     
@@ -383,7 +383,7 @@ def test_today_counters():
     cur.execute("""
         INSERT INTO cards (front, back, next_review, state, step, stability, difficulty, last_review, reps, lapses, card_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, ("today_general_w1", "測試一般單字1", now_str, 1, 0, None, None, None, 0, 0, 'recognize'))
+    """, ("today_general_w1", "測試一般單字1", now_str, 0, 0, None, None, None, 0, 0, 'recognize'))
     c_general_id = cur.lastrowid
     cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (c_general_id, deck_general_id))
     

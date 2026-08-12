@@ -10,15 +10,21 @@ app = Flask(__name__)
 app.config.from_object(Config)
 csrf = CSRFProtect(app)
 
-@app.errorhandler(CSRFError)
-def handle_csrf_error(e):
-    flash('CSRF 驗證失敗，請重試或重新整理頁面。', 'danger')
-    return redirect(request.referrer or url_for('index'))
-
 def is_safe_url(target):
+    if not target:
+        return False
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    flash('CSRF 驗證失敗，請重試或重新整理頁面。', 'danger')
+    ref = request.referrer
+    if ref and is_safe_url(ref):
+        return redirect(ref)
+    return redirect(url_for('index'))
+
 @app.context_processor
 def inject_empty_form():
     return dict(empty_form=EmptyForm())

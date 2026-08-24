@@ -434,7 +434,11 @@ def settings():
         retention = 0.9
         
     weights_val = db.get_setting('fsrs_weights', '預設 (尚未最佳化)')
-    return render_template('settings.html', desired_retention=retention, fsrs_weights=weights_val)
+    try:
+        daily_new_limit = max(0, int(db.get_setting('daily_new_limit', '20')))
+    except (TypeError, ValueError):
+        daily_new_limit = 20
+    return render_template('settings.html', desired_retention=retention, fsrs_weights=weights_val, daily_new_limit=daily_new_limit)
 
 @app.route('/settings/export-revlog')
 def export_revlog():
@@ -453,13 +457,30 @@ def update_weights():
         weights = request.form.get('fsrs_weights', '')
         try:
             w_list = [float(x.strip()) for x in weights.split(',')]
-            if len(w_list) in (17, 19, 21):
+            if len(w_list) == 21:
                 db.set_setting('fsrs_weights', weights.strip())
                 flash('FSRS 參數已更新！', 'success')
             else:
-                flash(f'參數數量不正確 ({len(w_list)})。FSRS 參數通常為 17, 19 或 21 個數值。', 'danger')
+                flash(f'參數數量不正確 ({len(w_list)})。目前版本需要 21 個數值。', 'danger')
         except ValueError:
             flash('參數格式錯誤，必須是逗號分隔的數值。', 'danger')
+    else:
+        flash('CSRF 驗證失敗', 'danger')
+    return redirect(url_for('settings'))
+
+@app.route('/settings/daily-new-limit', methods=['POST'])
+def update_daily_new_limit():
+    form = EmptyForm()
+    if form.validate_on_submit():
+        try:
+            limit = int(request.form.get('daily_new_limit', '20'))
+            if 0 <= limit <= 1000:
+                db.set_setting('daily_new_limit', str(limit))
+                flash(f'每日新卡上限已設為 {limit} 張。', 'success')
+            else:
+                flash('每日新卡上限必須介於 0 到 1000。', 'danger')
+        except (TypeError, ValueError):
+            flash('每日新卡上限必須是整數。', 'danger')
     else:
         flash('CSRF 驗證失敗', 'danger')
     return redirect(url_for('settings'))

@@ -1,7 +1,6 @@
 import sqlite3
 import os
 import csv
-import math
 import random
 from datetime import datetime, timezone, timedelta
 import requests
@@ -499,9 +498,6 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
 
         rows = conn.execute(query, params).fetchall()
 
-        # Query exam date before closing connection
-        earliest_exam_date = _get_earliest_exam_date(conn, deck_id, folder_id, now, exam_id=exam_id)
-
         new_cards = []
         due_cards = []
         day_cutoff_utc = get_day_cutoff_utc()
@@ -513,7 +509,11 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
             next_review = parse_db_datetime(next_review_str)
 
             if reps == 0:
-                new_cards.append(c_dict)
+                # Exam scheduling can intentionally introduce a new card on a
+                # future day.  Treat next_review as the introduction time
+                # instead of exposing every unseen card immediately.
+                if not next_review or next_review <= now:
+                    new_cards.append(c_dict)
             else:
                 db_state = r['state']
                 if db_state in (1, 3):  # Learning = 1, Relearning = 3
@@ -524,52 +524,29 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
                 if is_due:
                     due_cards.append(c_dict)
 
-        # Dynamically limit new cards based on exam schedule
-        if earliest_exam_date and new_cards:
-            total_days = (earliest_exam_date.date() - now.date()).days
-            if total_days > 0:
-                cutoff_date = earliest_exam_date - timedelta(days=7)
-                days_to_cutoff = (cutoff_date.date() - now.date()).days
-
-                if days_to_cutoff > 0:
-                    # Before cutoff: distribute new cards across days until cutoff
-                    days_for_new = days_to_cutoff
-                else:
-                    # Past cutoff: distribute across all remaining days before exam
-                    days_for_new = max(1, total_days)
-
-                date_str = now.strftime('%Y-%m-%d')
-                if deck_id:
-                    scope_key = f"deck_{deck_id}"
-                elif folder_id:
-                    scope_key = f"folder_{folder_id}"
-                elif exam_id:
-                    scope_key = f"exam_{exam_id}"
-                else:
-                    scope_key = "all"
-                    
-                setting_key = f"daily_new_{scope_key}_{date_str}"
-                row = conn.execute("SELECT value FROM settings WHERE key = ?", (setting_key,)).fetchone()
-                
-                current_new = len(new_cards)
-                start_count = current_new
-                
-                if row:
-                    start_count = int(row['value'])
-                    if current_new > start_count:
-                        start_count = current_new
-                        conn.execute("UPDATE settings SET value = ? WHERE key = ?", (str(start_count), setting_key))
-                        conn.commit()
-                else:
-                    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (setting_key, str(start_count)))
-                    conn.commit()
-
-                quota = math.ceil(start_count / days_for_new)
-                learned_today = start_count - current_new
-                today_new_count = max(0, quota - learned_today)
-
-                random.shuffle(new_cards)
-                new_cards = new_cards[:today_new_count]
+        # Exam-linked cards have already been spread across dates by
+        # distribute_exam_cards().  Count first reviews since the current
+        # logical day's 04:00 boundary so refreshing the page cannot reset the
+        # ordinary-deck new-card allowance.
+        try:
+            daily_new_limit = max(0, int(get_setting('daily_new_limit', '20')))
+        except (TypeError, ValueError):
+            daily_new_limit = 20
+        learned_today = 0
+        scope_card_ids = [r['id'] for r in rows]
+        if scope_card_ids:
+            day_start_utc = day_cutoff_utc - timedelta(days=1)
+            placeholders = ",".join("?" for _ in scope_card_ids)
+            learned_today = conn.execute(f"""
+                SELECT COUNT(DISTINCT card_id)
+                FROM revlog
+                WHERE review_state = 0
+                  AND review_time >= ?
+                  AND card_id IN ({placeholders})
+            """, [format_datetime_for_db(day_start_utc), *scope_card_ids]).fetchone()[0]
+        remaining_new = max(0, daily_new_limit - learned_today)
+        random.shuffle(new_cards)
+        new_cards = new_cards[:remaining_new]
 
         return new_cards, due_cards
     finally:
@@ -838,7 +815,10 @@ def distribute_exam_cards(exam_id, conn=None):
             random.shuffle(new_card_ids)
             for i, card_id in enumerate(new_card_ids):
                 day_offset = i % days_for_new
-                jitter_minutes = random.randint(0, 60)
+                # Cards assigned to today must be available immediately;
+                # adding positive jitter made the first batch disappear until
+                # later in the hour.
+                jitter_minutes = 0 if day_offset == 0 else random.randint(0, 60)
                 scheduled_dt = now + timedelta(days=day_offset, minutes=jitter_minutes)
 
                 cap_date = cutoff_date if days_to_cutoff > 0 else exam_date

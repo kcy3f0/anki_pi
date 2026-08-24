@@ -167,8 +167,8 @@
                 shuffleArray(dueQueue);
                 shuffleArray(newQueue);
                 
-                // Active queue: new cards first, then due cards
-                activeQueue = [...newQueue, ...dueQueue];
+                // Protect the review backlog: scheduled cards come before new material.
+                activeQueue = [...dueQueue, ...newQueue];
                 
                 updateProgressUI();
                 showNextCard();
@@ -300,14 +300,10 @@
                 return;
             }
             
-            // FSRS logic: If Rating is 1 (Again), we push it to the end of activeQueue so they review it again.
-            // Otherwise, we completely remove it from activeQueue.
-            const finishedCard = activeQueue.shift(); // Remove from front
-            
-            if (rating === 1) {
-                // Put back in queue to review again in this session
-                activeQueue.push(finishedCard);
-            }
+            // Always remove the answered card. FSRS has already returned its
+            // next due time; immediately re-queueing Again would bypass the
+            // Learning/Relearning delay calculated by the scheduler.
+            activeQueue.shift();
             
             updateProgressUI();
             showNextCard();

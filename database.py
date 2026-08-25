@@ -566,9 +566,12 @@ def submit_card_review(card_id, rating_val):
             card = Card()
             db_state = row['state'] if row['state'] is not None else 0
             reps = row['reps'] or 0
-            if db_state == 0 or reps == 0:
-                db_state = 0
-            card.state = State(db_state)
+            if reps == 0:
+                # New card: FSRS expects State.Learning (1), not 0
+                card.state = State.Learning
+            else:
+                # Existing card: use stored state (1=Learning, 2=Review, 3=Relearning)
+                card.state = State(db_state)
             card.step = row['step'] or 0
             card.stability = row['stability']
             card.difficulty = row['difficulty']

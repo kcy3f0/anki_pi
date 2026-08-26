@@ -14,7 +14,7 @@
     <!-- Left Section: Exams List -->
     <section class="dashboard-section folders-section">
         <h2><i class="fa-solid fa-calendar-days text-folder"></i> 目前的考試行程</h2>
-        
+
         {% if not exams %}
             <div class="empty-state">
                 <i class="fa-regular fa-calendar-times" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 12px; display: block;"></i>
@@ -52,7 +52,7 @@
                                     準備進度：<strong>{{ exam.learned_cards }}</strong> / {{ exam.total_cards }} 單字 ({{ exam.progress_percent }}%)
                                 </div>
                             </div>
-                            
+
                             <!-- Progress Bar -->
                             <div class="progress-bar-container" style="background-color: var(--bg-primary); border-radius: 9999px; height: 8px; overflow: hidden; margin-bottom: 16px;">
                                 <div class="progress-bar-fill" style="width: {{ exam.progress_percent }}%; background-color: var(--success); height: 100%; transition: width 0.3s ease;"></div>
@@ -91,7 +91,7 @@
     <!-- Right Section: Management Forms -->
     <section class="dashboard-section unassigned-section">
         <h2><i class="fa-solid fa-gear"></i> 管理與新增</h2>
-        
+
         <div class="form-container-card" style="max-width: 100%; padding: 24px;">
             <!-- Tabs Navigation -->
             <div class="tabs-nav" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; gap: 16px;">
@@ -182,14 +182,14 @@
         });
         // Show current tab content
         document.getElementById(tabId).style.display = 'block';
-        
+
         // Remove active class from all buttons
         document.querySelectorAll('.tab-btn').forEach(function(btn) {
             btn.style.borderBottomColor = 'transparent';
             btn.style.color = 'var(--text-secondary)';
             btn.style.fontWeight = '500';
         });
-        
+
         // Add active class to current button
         event.currentTarget.style.borderBottomColor = 'var(--primary)';
         event.currentTarget.style.color = 'var(--primary)';

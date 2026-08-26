@@ -4,38 +4,38 @@
     --text-primary: #0f172a;
     --text-secondary: #64748b;
     --border-color: #e2e8f0;
-    
+
     --primary: #4f46e5;
     --primary-hover: #4338ca;
     --primary-light: #e0e7ff;
-    
+
     --success: #10b981;
     --success-light: #d1fae5;
     --success-dark: #065f46;
-    
+
     --warning: #f59e0b;
     --warning-light: #fef3c7;
     --warning-dark: #92400e;
-    
+
     --danger: #ef4444;
     --danger-light: #fee2e2;
     --danger-dark: #991b1b;
-    
+
     --accent: #0ea5e9;
     --accent-light: #e0f2fe;
-    
+
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-    
+
     --radius-sm: 6px;
     --radius-md: 12px;
     --radius-lg: 18px;
-    
+
     --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-display: 'Outfit', sans-serif;
-    
+
     --header-height: 70px;
 }
 
@@ -46,22 +46,22 @@
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --border-color: #1e293b;
-    
+
     --primary: #6366f1;
     --primary-hover: #4f46e5;
     --primary-light: #1e1b4b;
-    
+
     --success-light: #064e3b;
     --success-dark: #a7f3d0;
-    
+
     --warning-light: #78350f;
     --warning-dark: #fde68a;
-    
+
     --danger-light: #7f1d1d;
     --danger-dark: #fecaca;
-    
+
     --accent-light: #0c4a6e;
-    
+
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
@@ -1150,12 +1150,12 @@ a.badge:active {
     :root {
         --header-height: 60px;
     }
-    
+
     /* Global Layout Adjustments */
     .app-content {
         padding: 20px 16px 100px 16px !important; /* Extra bottom padding for mobile nav */
     }
-    
+
     /* Header adjustments */
     .app-header {
         height: var(--header-height);
@@ -1170,12 +1170,12 @@ a.badge:active {
     .app-logo i {
         font-size: 1.35rem;
     }
-    
+
     /* Hide desktop navigation */
     .app-nav {
         display: none !important;
     }
-    
+
     /* Mobile Bottom Navigation Bar (Premium Glassmorphism) */
     .mobile-nav {
         display: flex;
@@ -1194,12 +1194,12 @@ a.badge:active {
         align-items: center;
         padding-bottom: env(safe-area-inset-bottom); /* Support for iPhone notch/home bar */
     }
-    
+
     .dark-mode .mobile-nav {
         background-color: rgba(18, 24, 36, 0.85);
         box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
     }
-    
+
     .mobile-nav-link {
         display: flex;
         flex-direction: column;
@@ -1214,25 +1214,25 @@ a.badge:active {
         transition: all 0.2s ease;
         padding-top: 4px;
     }
-    
+
     .mobile-nav-link i {
         font-size: 1.25rem;
         transition: transform 0.2s ease;
     }
-    
+
     .mobile-nav-link:hover {
         color: var(--text-primary);
     }
-    
+
     .mobile-nav-link:active i {
         transform: scale(0.9);
     }
-    
+
     .mobile-nav-link.active {
         color: var(--primary);
         font-weight: 600;
     }
-    
+
     /* Dashboard Home RWD */
     .dashboard-header {
         margin-bottom: 24px;
@@ -1256,7 +1256,7 @@ a.badge:active {
         font-size: 0.88rem;
         white-space: nowrap;
     }
-    
+
     /* Folder & Decks layout on mobile */
     .folder-card {
         margin-bottom: 16px;
@@ -1270,7 +1270,7 @@ a.badge:active {
     .deck-item {
         padding: 10px 12px;
     }
-    
+
     /* Responsive Table to Cards layout (Premium CSS Transform) */
     .table-container {
         border: none;
@@ -1278,20 +1278,20 @@ a.badge:active {
         background-color: transparent;
         margin-top: 16px;
     }
-    
-    .data-table, 
-    .data-table thead, 
-    .data-table tbody, 
-    .data-table th, 
-    .data-table td, 
+
+    .data-table,
+    .data-table thead,
+    .data-table tbody,
+    .data-table th,
+    .data-table td,
     .data-table tr {
         display: block;
     }
-    
+
     .data-table thead {
         display: none; /* Hide column headers */
     }
-    
+
     .data-table tr {
         border: 1px solid var(--border-color);
         margin-bottom: 16px;
@@ -1301,11 +1301,11 @@ a.badge:active {
         box-shadow: var(--shadow-sm);
         transition: transform 0.2s ease, border-color 0.2s ease;
     }
-    
+
     .data-table tr:hover {
         border-color: var(--primary);
     }
-    
+
     .data-table td {
         border-bottom: 1px solid rgba(0, 0, 0, 0.04);
         padding: 10px 0;
@@ -1315,17 +1315,17 @@ a.badge:active {
         font-size: 0.9rem;
         text-align: right;
     }
-    
+
     .dark-mode .data-table td {
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     }
-    
+
     .data-table td:last-child {
         border-bottom: none;
         padding-top: 12px;
         justify-content: flex-end;
     }
-    
+
     /* Generate dynamic mobile labels using nth-child pseudo selectors */
     .data-table td:nth-of-type(1):before { content: "正面 (英文)"; font-weight: 600; color: var(--text-secondary); }
     .data-table td:nth-of-type(2):before { content: "背面 (中文)"; font-weight: 600; color: var(--text-secondary); }
@@ -1334,13 +1334,13 @@ a.badge:active {
     .data-table td:nth-of-type(5):before { content: "下次複習"; font-weight: 600; color: var(--text-secondary); }
     .data-table td:nth-of-type(6):before { content: "複習進度"; font-weight: 600; color: var(--text-secondary); }
     .data-table td:nth-of-type(7):before { content: "操作"; font-weight: 600; color: var(--text-secondary); }
-    
+
     .data-table td:before {
         float: left;
         text-align: left;
         margin-right: 15px;
     }
-    
+
     /* Card list search container */
     .search-form {
         flex-direction: column;
@@ -1349,7 +1349,7 @@ a.badge:active {
     .search-form .btn {
         width: 100%;
     }
-    
+
     /* Footer adjustments */
     .app-footer {
         padding: 16px 16px 80px 16px; /* Extra bottom space for footer */
@@ -1367,7 +1367,7 @@ a.badge:active {
         font-size: 0.9rem !important;
         margin-right: 0 !important;
     }
-    
+
     /* Study Page Improvements */
     .study-header {
         flex-direction: column;
@@ -1392,7 +1392,7 @@ a.badge:active {
         font-size: 0.8rem;
         padding: 4px 8px;
     }
-    
+
     /* Study Card Area */
     .study-card-container {
         margin-bottom: 16px;
@@ -1410,7 +1410,7 @@ a.badge:active {
         font-size: 1.1rem !important;
         max-height: 150px !important;
     }
-    
+
     /* Interaction Panel */
     .study-interaction-panel {
         padding: 16px !important;
@@ -1427,7 +1427,7 @@ a.badge:active {
     .rating-text {
         font-size: 0.72rem !important;
     }
-    
+
     /* Spell mode input for mobile */
     .spell-input-group {
         flex-direction: column;
@@ -1440,7 +1440,7 @@ a.badge:active {
     .spell-result-alert {
         font-size: 0.9rem;
     }
-    
+
     /* Modals dynamic adaptation */
     .modal-content {
         width: 92% !important;
@@ -1452,12 +1452,12 @@ a.badge:active {
     .modal-footer {
         padding: 12px 20px !important;
     }
-    
+
     /* Form modifications on mobile */
     .form-container-card {
         padding: 16px !important;
     }
-    
+
     /* Force 1-column layouts for inline elements */
     .exams-cards-grid {
         grid-template-columns: 1fr !important;
@@ -1682,4 +1682,3 @@ a.badge:active {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-8px); }
 }
-

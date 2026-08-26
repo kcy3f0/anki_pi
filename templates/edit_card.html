@@ -8,20 +8,20 @@
         <h2><i class="fa-solid fa-pen-to-square"></i> 編輯記憶卡</h2>
         <a href="{{ url_for('cards_list') }}" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> 返回卡片管理</a>
     </div>
-    
+
     <form action="{{ url_for('edit_card', card_id=card.id) }}" method="POST">
         {{ form.csrf_token }}
-        
+
         <div class="form-group">
             <label for="{{ form.front.id }}">{{ form.front.label }}</label>
             {{ form.front(class="form-control") }}
         </div>
-        
+
         <div class="form-group">
             <label for="{{ form.back.id }}">{{ form.back.label }}</label>
             {{ form.back(class="form-control", rows="5") }}
         </div>
-        
+
         <div class="form-group">
             <label for="{{ form.card_type.id }}">{{ form.card_type.label }}</label>
             {{ form.card_type(class="form-control") }}
@@ -30,7 +30,7 @@
                 <strong>需要會拼 (spell):</strong> 隨機顯示正面或背面。若顯示背面（中文），則需拼寫出正面（英文）。
             </p>
         </div>
-        
+
         <div class="form-group">
             <label>{{ form.decks.label }}</label>
             <div class="checkbox-list">
@@ -43,7 +43,7 @@
                 {% endfor %}
             </div>
         </div>
-        
+
         <div class="form-actions">
             <a href="{{ url_for('cards_list') }}" class="btn btn-secondary">取消</a>
             <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> 儲存修改</button>

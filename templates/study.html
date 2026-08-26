@@ -55,7 +55,7 @@
 
     <!-- Interaction Panel -->
     <div class="study-interaction-panel">
-        
+
         <!-- 1. Spell Mode Text Input Panel -->
         <div class="spell-input-panel hidden" id="spell-panel">
             <p class="spell-prompt"><i class="fa-solid fa-pen-clip"></i> 請輸入英文拼寫：</p>
@@ -138,7 +138,7 @@
     const showAnswerPanel = document.getElementById('show-answer-panel');
     const btnShowAnswer = document.getElementById('btn-show-answer');
     const ratingPanel = document.getElementById('rating-panel');
-    
+
     const spellPanel = document.getElementById('spell-panel');
     const spellInput = document.getElementById('spell-input');
     const spellSubmitBtn = document.getElementById('spell-submit-btn');
@@ -162,14 +162,14 @@
                 }
                 dueQueue = data.due_cards || [];
                 newQueue = data.new_cards || [];
-                
+
                 // Shuffle both queues
                 shuffleArray(dueQueue);
                 shuffleArray(newQueue);
-                
+
                 // Protect the review backlog: scheduled cards come before new material.
                 activeQueue = [...dueQueue, ...newQueue];
-                
+
                 updateProgressUI();
                 showNextCard();
             })
@@ -210,7 +210,7 @@
         }
 
         currentCard = activeQueue[0];
-        
+
         // Populate Front / Back text
         frontText.textContent = currentCard.front;
         // Format back text (newlines to br)
@@ -219,7 +219,7 @@
         // Set type badges
         const typeText = currentCard.card_type === 'spell' ? '拼寫卡 (spell)' : '認得卡 (recognize)';
         const badgeClass = currentCard.card_type === 'spell' ? 'badge-spell-type' : 'badge-recognize-type';
-        
+
         frontTypeBadge.textContent = typeText;
         frontTypeBadge.className = `badge ${badgeClass}`;
         backTypeBadge.textContent = typeText;
@@ -235,7 +235,7 @@
             // In spell mode, 50% chance to show front first (recognize), 50% chance to show back first (spell)
             // But if it shows back first, we need to ask user to spell the front!
             spellShownSide = Math.random() < 0.5 ? 'front' : 'back';
-            
+
             if (spellShownSide === 'back') {
                 // Show back initially (flip it!)
                 flipCard.classList.add('flipped');
@@ -299,12 +299,12 @@
                 alert('提交評估失敗！');
                 return;
             }
-            
+
             // Always remove the answered card. FSRS has already returned its
             // next due time; immediately re-queueing Again would bypass the
             // Learning/Relearning delay calculated by the scheduler.
             activeQueue.shift();
-            
+
             updateProgressUI();
             showNextCard();
         })

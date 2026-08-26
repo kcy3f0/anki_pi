@@ -54,13 +54,13 @@ if ($LASTEXITCODE -eq 0) {
 # 4. Generate .env Configuration
 if (-not (Test-Path ".env")) {
     Write-Host "Setting up environment configuration (.env)..." -ForegroundColor Yellow
-    
+
     # Generate random key
     $bytes = New-Object Byte[] 24
     $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
     $rng.GetBytes($bytes)
     $secretKey = [System.Convert]::ToBase64String($bytes)
-    
+
     $discordWebhook = ""
     if ($NonInteractive) {
         Write-Host "Non-interactive mode, skipping Discord Webhook URL prompt." -ForegroundColor Green
@@ -70,7 +70,7 @@ if (-not (Test-Path ".env")) {
         Write-Host "If yes, paste the Discord Webhook URL below. Otherwise, press Enter to skip."
         $discordWebhook = Read-Host "Discord Webhook URL (Optional)"
     }
-    
+
     $envContent = @"
 SECRET_KEY=$secretKey
 DATABASE_PATH=flashcards.db
@@ -87,7 +87,7 @@ Write-Host "Creating desktop shortcut..." -ForegroundColor Yellow
 try {
     $desktop = [System.Environment]::GetFolderPath('Desktop')
     $shortcutPath = Join-Path $desktop "Anki Pi.lnk"
-    
+
     $WshShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut($shortcutPath)
     $Shortcut.TargetPath = "cmd.exe"
@@ -96,7 +96,7 @@ try {
     $Shortcut.WorkingDirectory = $PSScriptRoot
     $Shortcut.Description = "Start Anki Pi Server"
     $Shortcut.Save()
-    
+
     Write-Host "Shortcut created successfully on Desktop (Anki Pi.lnk)!" -ForegroundColor Green
 } catch {
     Write-Warning "Failed to create desktop shortcut. You can still run the app by executing 'python app.py' directly."

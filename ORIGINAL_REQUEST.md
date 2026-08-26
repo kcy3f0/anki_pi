@@ -75,4 +75,3 @@ Integrity mode: development
 - [ ] `database.py` 考試過期重新分配 (Bug 23) 已修正冗餘 break 邏輯。
 - [ ] `config.py` 與 `app.py` 安全金鑰與 Debug 模式 (Bug 25, 26) 已修正。
 - [ ] `test_exam_scheduling.py` 中的初始 state 斷言已同步更新為 0。
-

@@ -55,7 +55,7 @@ if ($confirm.ToLower() -eq 'y') {
         Copy-Item "flashcards.db" $backupTemp
         Write-Host "已將目前的資料庫備份為 $backupTemp 以防萬一。" -ForegroundColor Gray
     }
-    
+
     # Perform restore
     Copy-Item $targetBackup.FullName "flashcards.db" -Force
     Write-Host "資料庫還原完成！" -ForegroundColor Green

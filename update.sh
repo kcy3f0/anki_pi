@@ -120,4 +120,3 @@ if systemctl list-units --full -all | grep -Fq "anki_pi.service"; then
     echo -e "\n${YELLOW}[服務狀態]${NC}"
     sudo systemctl status anki_pi --no-pager
 fi
-

@@ -98,7 +98,7 @@
   total_pages = (total + limit - 1) // limit
   import_form = ImportForm()
   import_form.decks.choices = form.decks.choices
-  
+
   return render_template(
       'cards.html',
       cards=cards,
@@ -167,13 +167,13 @@
       url = Config.DISCORD_WEBHOOK_URL
       if not url:
           return
-      
+
       def run_send():
           try:
               requests.post(url, json={"content": content}, timeout=5)
           except Exception as e:
               print(f"Error sending Discord Webhook: {e}")
-              
+
       threading.Thread(target=run_send, daemon=True).start()
   ```
 
@@ -314,7 +314,7 @@
               cur = conn.cursor()
               cur.execute("INSERT INTO decks (name) VALUES (?)", (name,))
               deck_id = cur.lastrowid
-              
+
               if folder_ids:
                   for fid in folder_ids:
                       cur.execute("INSERT INTO deck_folders (deck_id, folder_id) VALUES (?, ?)", (deck_id, fid))
@@ -339,7 +339,7 @@
               cur = conn.cursor()
               front = front.strip()
               back = back.strip()
-              
+
               existing = cur.execute("SELECT * FROM cards WHERE front = ?", (front,)).fetchone()
               if existing:
                   # 合併釋義邏輯...
@@ -351,10 +351,10 @@
                   cur.execute("INSERT INTO cards ... VALUES (?, ?, ...)", (front, back, now_str, 0, ...))
                   card_id = cur.lastrowid
                   merged = False
-                  
+
               for did in deck_ids:
                   cur.execute("INSERT INTO card_decks (card_id, deck_id) VALUES (?, ?)", (card_id, did))
-                  
+
               return card_id, merged
       finally:
           conn.close()
@@ -432,7 +432,7 @@
   ```python
   # 建議使用多表 JOIN 一次性查出統計，例如：
   # SELECT f.id, f.name, d.id, d.name, COUNT(c.id) FILTER (WHERE c.state = 0) AS new_cards...
-  # FROM folders f 
+  # FROM folders f
   # LEFT JOIN deck_folders df ON f.id = df.folder_id
   # LEFT JOIN decks d ON df.deck_id = d.id
   # LEFT JOIN card_decks cd ON d.id = cd.deck_id
@@ -464,7 +464,7 @@
   在 `parse_db_datetime` 處理含有小數秒（微秒）的時間字串時，代碼使用了 `dt_str.split('.')`。若字串中包含時區偏移量（例如 `2026-06-14T08:01:25.123456+08:00`），`split` 會將其切分為：
   * `base` = `"2026-06-14T08:01:25"`
   * `micro` = `"123456+08:00"`
-  
+
   接著執行 `micro = micro[:6]`，截取前 6 位得到 `"123456"`，此動作將時區偏移量 `+08:00` 完全丟棄。隨後使用 `.replace(tzinfo=timezone.utc)`，將該時間無條件當作 UTC 時間。這導致原本的本地時間與 UTC 產生了 8 小時的巨大偏差，引發排程時間混亂。
 * **具體修復建議與建議修復的程式碼片段**：
   使用正規表示式匹配並提取時區部分，在截斷微秒後將時區補回或進行轉換：
@@ -475,18 +475,18 @@
       if not dt_str:
           return None
       dt_str = dt_str.strip()
-      
+
       # 匹配末尾時區 (如 +08:00, -05:00, Z)
       tz_match = re.search(r'([+-]\d{2}:?\d{2}|Z)$', dt_str)
       tz_part = tz_match.group(1) if tz_match else ""
       if tz_part:
           dt_str = dt_str[:-len(tz_part)]
-      
+
       if '.' in dt_str:
           base, micro = dt_str.split('.')
           micro = micro[:6]
           dt_str = f"{base}.{micro}"
-      
+
       try:
           dt = datetime.fromisoformat(dt_str)
           if tz_part == 'Z' or tz_part == '+00:00' or not tz_part:

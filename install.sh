@@ -99,4 +99,3 @@ IP_ADDRESS=$(hostname -I | awk '{print $1}')
 echo -e "${GREEN}=== 安裝完成！ ===${NC}"
 echo -e "服務已啟動，請瀏覽器開啟： http://$IP_ADDRESS:10000"
 echo -e "若要查看服務狀態，請執行： sudo systemctl status anki_pi"
-

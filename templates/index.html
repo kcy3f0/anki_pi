@@ -40,7 +40,7 @@
                     {% endif %}
                 </div>
             </div>
-            
+
             <div class="today-counter-right">
                 <!-- 考試範圍單字 -->
                 <div class="today-split-box exam-split">
@@ -49,7 +49,7 @@
                         <div>
                             <h4>考試日程範圍</h4>
                             <p class="split-count">
-                                待複習: <span class="count-num">{{ today_stats.exam_due_count }}</span> | 
+                                待複習: <span class="count-num">{{ today_stats.exam_due_count }}</span> |
                                 新單字: <span class="count-num">{{ today_stats.exam_new_count }}</span>
                             </p>
                         </div>
@@ -62,7 +62,7 @@
                         <span class="btn btn-today-done"><i class="fa-solid fa-circle-check"></i> 已完成</span>
                     {% endif %}
                 </div>
-                
+
                 <!-- 一般複習單字 -->
                 <div class="today-split-box general-split">
                     <div class="split-info">
@@ -70,7 +70,7 @@
                         <div>
                             <h4>一般複習範圍</h4>
                             <p class="split-count">
-                                待複習: <span class="count-num">{{ today_stats.general_due_count }}</span> | 
+                                待複習: <span class="count-num">{{ today_stats.general_due_count }}</span> |
                                 新單字: <span class="count-num">{{ today_stats.general_new_count }}</span>
                             </p>
                         </div>
@@ -85,7 +85,7 @@
                 </div>
             </div>
         </div>
-        
+
         {% if today_stats.today_total == 0 %}
             <div class="today-celebration">
                 <div class="confetti-icon">🎉</div>
@@ -106,7 +106,7 @@
             <div class="exam-summary-card" style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-primary)); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 20px; transition: transform 0.2s ease, border-color 0.2s ease; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;">
                 <!-- Decorative Top Border for premium look -->
                 <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary), var(--accent));"></div>
-                
+
                 <div class="exam-summary-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px;">
                     <div>
                         <span class="badge badge-due" style="margin-bottom: 6px;"><i class="fa-solid fa-graduation-cap"></i> 考試</span>
@@ -116,17 +116,17 @@
                         <i class="fa-solid fa-hourglass-half"></i> {{ exam.countdown_str }}
                     </span>
                 </div>
-                
+
                 <div class="exam-summary-body" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; margin-top: 8px;">
                     <div style="font-size: 0.9rem; color: var(--text-secondary); display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <span><i class="fa-regular fa-calendar"></i> {{ exam.date.replace('T', ' ')[:10] }}</span>
                         <span>已背：<strong>{{ exam.learned_cards }}</strong> / {{ exam.total_cards }}</span>
                     </div>
-                    
+
                     <div class="progress-bar-container" style="background-color: var(--border-color); border-radius: 9999px; height: 8px; overflow: hidden; margin-bottom: 16px;">
                         <div class="progress-bar-fill" style="width: {{ exam.progress_percent }}%; background: linear-gradient(90deg, var(--success), #34d399); height: 100%; transition: width 0.3s ease;"></div>
                     </div>
-                    
+
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; flex-wrap: wrap; gap: 8px;">
                         <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 70%;">
                             {% for folder in exam.folders %}
@@ -151,7 +151,7 @@
     <!-- Folders Section -->
     <section class="dashboard-section folders-section">
         <h2><i class="fa-solid fa-folder"></i> 資料夾與牌組</h2>
-        
+
         {% if not folders %}
             <div class="empty-state">
                 <i class="fa-regular fa-folder-open"></i>

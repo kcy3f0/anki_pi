@@ -17,11 +17,11 @@ if (Test-Path "flashcards.db") {
     if (-not (Test-Path "backups")) {
         New-Item -ItemType Directory -Path "backups" | Out-Null
     }
-    
+
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $backupFile = "backups\flashcards_backup_$timestamp.db"
     Copy-Item "flashcards.db" $backupFile
-    
+
     Write-Host "資料庫備份成功：$backupFile" -ForegroundColor Green
 } else {
     Write-Host "未偵測到 flashcards.db，跳過備份。" -ForegroundColor Yellow

@@ -101,9 +101,9 @@
                 {% if page > 1 %}
                     <a href="{{ url_for('cards_list', search=search, page=page-1, deck_id=deck_id) }}" class="page-link">&laquo; 上一頁</a>
                 {% endif %}
-                
+
                 <span class="page-info">第 {{ page }} / {{ total_pages }} 頁 (共 {{ total }} 筆)</span>
-                
+
                 {% if page < total_pages %}
                     <a href="{{ url_for('cards_list', search=search, page=page+1, deck_id=deck_id) }}" class="page-link">下一頁 &raquo;</a>
                 {% endif %}

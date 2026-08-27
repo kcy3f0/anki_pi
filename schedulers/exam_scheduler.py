@@ -147,11 +147,19 @@ class ExamSchedulerImpl:
             if not exam_date:
                 return []
 
+            # 驗證輸入
+            if not card_ids:
+                return []
+            if len(card_ids) > 10000:
+                raise ValueError("card_ids 數量過大（最多 10000）")
+
+            # 安全的 IN 查詢
+            placeholders = ",".join("?" for _ in card_ids)
             rows = cur.execute(
-                """
+                f"""
                 SELECT id, reps, next_review FROM cards
-                WHERE id IN ({})
-            """.format(",".join("?" * len(card_ids))),
+                WHERE id IN ({placeholders})
+            """,
                 card_ids,
             ).fetchall()
 

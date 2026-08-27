@@ -1,5 +1,6 @@
 # database.py - Strangler Fig facade: delegates to new modules while preserving exact same API
 from __future__ import annotations
+import logging
 from config import Config
 from adapters.sqlite_adapter import SqliteAdapter
 from domain.time_provider import SystemTimeProvider
@@ -12,6 +13,8 @@ from domain.protocols import Notifier
 from notifiers.discord_notifier import DiscordNotifier
 from notifiers.null_notifier import NullNotifier
 from domain.models import CardScope, ExamScope
+
+logger = logging.getLogger(__name__)
 
 # Initialize adapter and domain modules (singletons for backward compatibility)
 _adapter = SqliteAdapter(Config.DATABASE_PATH)
@@ -262,6 +265,7 @@ def get_study_cards(deck_id=None, folder_id=None, exam_id=None):
 def submit_card_review(card_id, rating_val):
     card_state = _card_repo.get_card_state(card_id)
     if not card_state:
+        logger.warning("嘗試複習不存在的卡片: card_id=%d", card_id)
         return None
 
     retention = float(_settings_repo.get("desired_retention", "0.9") or "0.9")
@@ -271,8 +275,13 @@ def submit_card_review(card_id, rating_val):
             weights = tuple(float(w.strip()) for w in weights_str.split(","))
             if len(weights) == 21:
                 _fsrc_scheduler.set_parameters(weights)
-        except ValueError:
-            pass
+                logger.info("使用自定義 FSRS 參數（%d 維）", len(weights))
+            else:
+                logger.warning(
+                    "FSRS 參數數量錯誤（需 21 個，目前 %d 個）", len(weights)
+                )
+        except ValueError as e:
+            logger.error("FSRS 參數解析失敗: %s", e)
 
     exam_cutoff = _exam_scheduler.get_earliest_exam_cutoff(card_id)
     scheduled = _fsrc_scheduler.review(
@@ -370,19 +379,21 @@ def distribute_exam_cards(exam_id, conn=None):
         if not exam_date:
             return
 
+        # 使用 JOIN 替代複雜的子查詢，提升效能與可讀性
         rows = cur.execute(
             """
-            SELECT id, reps, next_review FROM cards
-            WHERE id IN (
-                SELECT DISTINCT cd.card_id FROM card_decks cd
-                WHERE cd.deck_id IN (
-                    SELECT deck_id FROM exam_decks WHERE exam_id = ?
-                    UNION
-                    SELECT deck_id FROM deck_folders WHERE folder_id IN (
-                        SELECT folder_id FROM exam_folders WHERE exam_id = ?
-                    )
-                )
-            )
+            SELECT DISTINCT c.id, c.reps, c.next_review
+            FROM cards c
+            INNER JOIN card_decks cd ON c.id = cd.card_id
+            INNER JOIN exam_decks ed ON cd.deck_id = ed.deck_id
+            WHERE ed.exam_id = ?
+            UNION
+            SELECT DISTINCT c.id, c.reps, c.next_review
+            FROM cards c
+            INNER JOIN card_decks cd ON c.id = cd.card_id
+            INNER JOIN deck_folders df ON cd.deck_id = df.deck_id
+            INNER JOIN exam_folders ef ON df.folder_id = ef.folder_id
+            WHERE ef.exam_id = ?
         """,
             (exam_id, exam_id),
         ).fetchall()

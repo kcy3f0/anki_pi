@@ -1,14 +1,22 @@
 # repos/card_repo.py
 from __future__ import annotations
-import io
 import csv
+import io
+import logging
 from datetime import datetime
-from typing import List, Tuple, Any
+from typing import List, Tuple, Any, Dict
 from domain.protocols import DatabaseAdapter, CardScope, TimeProvider
 from domain.models import CardRow, CardState, ScheduledReview
 
+logger = logging.getLogger(__name__)
+
 
 class CardRepoImpl:
+    # CSV 匯入限制
+    CSV_MAX_SIZE = 1024 * 1024  # 1MB
+    CSV_MAX_ROWS = 10000  # 最大匯入筆數
+    FIELD_MAX_LENGTH = 500  # 每個欄位最大長度
+
     def __init__(self, adapter: DatabaseAdapter, time_provider: TimeProvider):
         self.adapter = adapter
         self.time = time_provider
@@ -95,22 +103,42 @@ class CardRepoImpl:
 
         cards = self.adapter.execute(query, tuple(params))
 
+        # 批次查詢所有卡片的 deck 資訊，避免 N+1 查詢問題
+        card_ids = [c["id"] for c in cards]
+        deck_names_map: Dict[int, List[str]] = {}
+        deck_ids_map: Dict[int, List[int]] = {}
+
+        if card_ids:
+            placeholders = ",".join("?" for _ in card_ids)
+            # 查詢 deck names
+            deck_rows = self.adapter.execute(
+                f"""
+                SELECT cd.card_id, d.name
+                FROM decks d
+                JOIN card_decks cd ON d.id = cd.deck_id
+                WHERE cd.card_id IN ({placeholders})
+            """,
+                tuple(card_ids),
+            )
+            for row in deck_rows:
+                deck_names_map.setdefault(row["card_id"], []).append(row["name"])
+
+            # 查詢 deck ids
+            deck_links = self.adapter.execute(
+                f"""
+                SELECT card_id, deck_id FROM card_decks
+                WHERE card_id IN ({placeholders})
+            """,
+                tuple(card_ids),
+            )
+            for row in deck_links:
+                deck_ids_map.setdefault(row["card_id"], []).append(row["deck_id"])
+
         card_list = []
         for c in cards:
             c_dict = dict(c)
-            decks = self.adapter.execute(
-                """
-                SELECT d.name FROM decks d
-                JOIN card_decks cd ON d.id = cd.deck_id
-                WHERE cd.card_id = ?
-            """,
-                (c["id"],),
-            )
-            c_dict["deck_names"] = [d["name"] for d in decks]
-            deck_links = self.adapter.execute(
-                "SELECT deck_id FROM card_decks WHERE card_id = ?", (c["id"],)
-            )
-            c_dict["deck_ids"] = [d["deck_id"] for d in deck_links]
+            c_dict["deck_names"] = deck_names_map.get(c["id"], [])
+            c_dict["deck_ids"] = deck_ids_map.get(c["id"], [])
             card_list.append(CardRow(**c_dict))
 
         return card_list, total
@@ -118,8 +146,8 @@ class CardRepoImpl:
     def add(
         self, front: str, back: str, card_type: str, deck_ids: List[int]
     ) -> Tuple[int, bool]:
-        front_stripped = front.strip()
-        back_stripped = back.strip()
+        front_stripped = front.strip()[: self.FIELD_MAX_LENGTH]
+        back_stripped = back.strip()[: self.FIELD_MAX_LENGTH]
 
         def _tx(conn):
             cur = conn.cursor()
@@ -138,7 +166,7 @@ class CardRepoImpl:
                 )
                 cur.execute(
                     "UPDATE cards SET back = ?, card_type = ? WHERE id = ?",
-                    (merged_back, new_type, existing["id"]),
+                    (merged_back[: self.FIELD_MAX_LENGTH], new_type, existing["id"]),
                 )
                 card_id = existing["id"]
                 merged = True
@@ -187,7 +215,12 @@ class CardRepoImpl:
                 """
                 UPDATE cards SET front = ?, back = ?, card_type = ? WHERE id = ?
             """,
-                (front.strip(), back.strip(), card_type, card_id),
+                (
+                    front.strip()[: self.FIELD_MAX_LENGTH],
+                    back.strip()[: self.FIELD_MAX_LENGTH],
+                    card_type,
+                    card_id,
+                ),
             )
             cur.execute("DELETE FROM card_decks WHERE card_id = ?", (card_id,))
             for did in deck_ids:
@@ -212,9 +245,17 @@ class CardRepoImpl:
         if ct not in ["recognize", "spell"]:
             ct = "recognize"
 
+        # 驗證輸入大小
+        if len(csv_text) > self.CSV_MAX_SIZE:
+            raise ValueError(f"CSV 內容過大（最大 {self.CSV_MAX_SIZE // 1024}KB）")
+
         def _tx(conn):
             cur = conn.cursor()
             try:
+                lines = csv_text.strip().split("\n")
+                if len(lines) > self.CSV_MAX_ROWS:
+                    raise ValueError(f"CSV 行數過多（最多 {self.CSV_MAX_ROWS} 行）")
+
                 reader = csv.reader(io.StringIO(csv_text.strip()))
             except csv.Error as e:
                 raise ValueError(f"CSV 格式解析失敗：{str(e)}")
@@ -223,12 +264,12 @@ class CardRepoImpl:
             merged_count = 0
             now_str = self.time.format_iso(self.time.now_utc())
 
-            for row in reader:
+            for row_num, row in enumerate(reader, 1):
                 try:
                     if not row or len(row) < 2:
                         continue
-                    front = row[0].strip()
-                    back = row[1].strip()
+                    front = row[0].strip()[: self.FIELD_MAX_LENGTH]
+                    back = row[1].strip()[: self.FIELD_MAX_LENGTH]
                     if not front or not back:
                         continue
 
@@ -244,7 +285,11 @@ class CardRepoImpl:
                         )
                         cur.execute(
                             "UPDATE cards SET back = ?, card_type = ? WHERE id = ?",
-                            (merged_back, new_card_type, existing["id"]),
+                            (
+                                merged_back[: self.FIELD_MAX_LENGTH],
+                                new_card_type,
+                                existing["id"],
+                            ),
                         )
                         card_id = existing["id"]
                         merged_count += 1
@@ -269,7 +314,7 @@ class CardRepoImpl:
                                 (card_id, did),
                             )
                 except IndexError:
-                    raise ValueError("CSV 檔案中有些行缺少必要的欄位！")
+                    raise ValueError(f"CSV 第 {row_num} 行缺少必要的欄位！")
 
             if imported_count > 0 or merged_count > 0:
                 from database import send_discord_message

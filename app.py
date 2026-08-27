@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from urllib.parse import urlparse, urljoin
 import os
+import logging
 from config import Config
 import database as db
 from forms import (
@@ -13,6 +14,12 @@ from forms import (
     ExamForm,
     ExamImportForm,
 )
+
+# 設定日誌
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -29,6 +36,13 @@ def is_safe_url(target):
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
+    logger.warning(
+        "CSRF 驗證失敗 - IP: %s, URL: %s, Method: %s, Referrer: %s",
+        request.remote_addr,
+        request.url,
+        request.method,
+        request.referrer,
+    )
     flash("CSRF 驗證失敗，請重試或重新整理頁面。", "danger")
     ref = request.referrer
     if ref and is_safe_url(ref):

@@ -34,8 +34,14 @@ if [ -f "$DB_FILE" ]; then
     COMMIT_HASH=$(git rev-parse --short HEAD)
     BACKUP_FILE="$BACKUP_DIR/flashcards_${TIMESTAMP}_${COMMIT_HASH}_update.db"
 
-    cp "$DB_FILE" "$BACKUP_FILE"
-    echo -e "${GREEN}資料庫已備份至: $BACKUP_FILE${NC}"
+    # 使用 SQLite VACUUM INTO 確保備份一致性 (支援 WAL 模式)
+    if sqlite3 "$DB_FILE" "VACUUM INTO '$BACKUP_FILE'" 2>/dev/null; then
+        echo -e "${GREEN}資料庫已備份至: $BACKUP_FILE${NC}"
+    else
+        # 回退到簡單複製（舊版 SQLite 不支援 VACUUM INTO）
+        cp "$DB_FILE" "$BACKUP_FILE"
+        echo -e "${YELLOW}警告: 使用簡單複製備份（建議升級 SQLite 以支援 VACUUM INTO）${NC}"
+    fi
 
     # 輪替備份 (保留最新的 5 份)
     # ls -t: 按時間排序 (最新的在前)

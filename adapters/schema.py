@@ -83,5 +83,14 @@ CREATE TABLE IF NOT EXISTS revlog (
     FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 
+-- 索引優化查詢效能
 CREATE INDEX IF NOT EXISTS idx_revlog_card_id ON revlog(card_id);
+CREATE INDEX IF NOT EXISTS idx_exams_date_processed ON exams(date, processed);
+CREATE INDEX IF NOT EXISTS idx_card_decks_card_id ON card_decks(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_decks_deck_id ON card_decks(deck_id);
+CREATE INDEX IF NOT EXISTS idx_deck_folders_folder_id ON deck_folders(folder_id);
+CREATE INDEX IF NOT EXISTS idx_exam_decks_exam_id ON exam_decks(exam_id);
+CREATE INDEX IF NOT EXISTS idx_exam_folders_exam_id ON exam_folders(exam_id);
+CREATE INDEX IF NOT EXISTS idx_cards_next_review ON cards(next_review);
+CREATE INDEX IF NOT EXISTS idx_cards_state_reps ON cards(state, reps);
 """

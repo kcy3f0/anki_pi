@@ -146,6 +146,16 @@
     const completeScreen = document.getElementById('complete-screen');
     const studyWrapper = document.querySelector('.study-wrapper');
 
+    // XSS 防護：HTML 轉義函數
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&")
+            .replace(/</g, "<")
+            .replace(/>/g, ">")
+            .replace(/"/g, """)
+            .replace(/'/g, "&#039;");
+    }
+
     // Load cards on page load
     window.addEventListener('DOMContentLoaded', () => {
         fetchCards();
@@ -211,10 +221,10 @@
 
         currentCard = activeQueue[0];
 
-        // Populate Front / Back text
+        // Populate Front / Back text (使用 textContent 防止 XSS)
         frontText.textContent = currentCard.front;
-        // Format back text (newlines to br)
-        backText.innerHTML = currentCard.back.replace(/\n/g, '<br>');
+        // Format back text (newlines to br) - 先轉義再替換換行
+        backText.innerHTML = escapeHtml(currentCard.back).replace(/\n/g, '<br>');
 
         // Set type badges
         const typeText = currentCard.card_type === 'spell' ? '拼寫卡 (spell)' : '認得卡 (recognize)';
@@ -274,7 +284,8 @@
             spellResultAlert.textContent = "🎉 拼寫正確！";
             spellResultAlert.className = "spell-result-alert spell-success";
         } else {
-            spellResultAlert.innerHTML = `❌ 拼寫錯誤！<br>正確答案是：<strong class="font-outfit font-lg">${currentCard.front}</strong><br>您輸入的是：<strong>${spellInput.value}</strong>`;
+            // 使用 textContent + 轉義防止 XSS
+            spellResultAlert.innerHTML = `❌ 拼寫錯誤！<br>正確答案是：<strong class="font-outfit font-lg">${escapeHtml(currentCard.front)}</strong><br>您輸入的是：<strong>${escapeHtml(spellInput.value)}</strong>`;
             spellResultAlert.className = "spell-result-alert spell-error";
         }
 
@@ -315,7 +326,6 @@
     }
 
 
-
     function openDictionary(word) {
         const cleanWord = encodeURIComponent(word.trim().replace(/\s+/g, '-'));
         const url = `https://dictionary.cambridge.org/dictionary/english-chinese-traditional/${cleanWord}`;
@@ -340,7 +350,6 @@
                 handleSpellingSubmit();
             }
         });
-
 
 
         // Dictionary Buttons

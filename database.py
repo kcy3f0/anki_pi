@@ -185,7 +185,9 @@ def get_card_by_id(card_id):
 def add_card(front, back, card_type, deck_ids):
     card_id, merged = _card_repo.add(front, back, card_type, deck_ids)
     if merged:
-        _notifier.notify(type("CardsImportedEvent", (), {"imported": 0, "merged": 1})())
+        from domain.events import CardsImportedEvent
+
+        _notifier.notify(CardsImportedEvent(imported=0, merged=1))
     return card_id, merged
 
 

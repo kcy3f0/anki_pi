@@ -1,5 +1,7 @@
 # schedulers/exam_scheduler.py
 from __future__ import annotations
+import csv
+import io
 import random
 from datetime import datetime, timedelta
 from domain.protocols import (
@@ -133,10 +135,17 @@ class ExamSchedulerImpl:
         return earliest_exam
 
     def distribute(
-        self, exam_id: int, card_ids: list[int], now: datetime
+        self,
+        exam_id: int,
+        card_ids: list[int] | None = None,
+        now: datetime | None = None,
+        conn=None,
     ) -> list[SchedulePlan]:
-        def _tx(conn):
-            cur = conn.cursor()
+        if now is None:
+            now = self.time.now_utc()
+
+        def _tx(c):
+            cur = c.cursor()
             exam = cur.execute(
                 "SELECT date FROM exams WHERE id = ?", (exam_id,)
             ).fetchone()
@@ -147,21 +156,38 @@ class ExamSchedulerImpl:
             if not exam_date:
                 return []
 
-            # 驗證輸入
-            if not card_ids:
-                return []
-            if len(card_ids) > 10000:
-                raise ValueError("card_ids 數量過大（最多 10000）")
+            if card_ids is not None and len(card_ids) > 0:
+                if len(card_ids) > 10000:
+                    raise ValueError("card_ids 數量過大（最多 10000）")
+                placeholders = ",".join("?" for _ in card_ids)
+                rows = cur.execute(
+                    f"""
+                    SELECT id, reps, next_review FROM cards
+                    WHERE id IN ({placeholders})
+                """,
+                    card_ids,
+                ).fetchall()
+            else:
+                rows = cur.execute(
+                    """
+                    SELECT DISTINCT c.id, c.reps, c.next_review
+                    FROM cards c
+                    INNER JOIN card_decks cd ON c.id = cd.card_id
+                    INNER JOIN exam_decks ed ON cd.deck_id = ed.deck_id
+                    WHERE ed.exam_id = ?
+                    UNION
+                    SELECT DISTINCT c.id, c.reps, c.next_review
+                    FROM cards c
+                    INNER JOIN card_decks cd ON c.id = cd.card_id
+                    INNER JOIN deck_folders df ON cd.deck_id = df.deck_id
+                    INNER JOIN exam_folders ef ON df.folder_id = ef.folder_id
+                    WHERE ef.exam_id = ?
+                """,
+                    (exam_id, exam_id),
+                ).fetchall()
 
-            # 安全的 IN 查詢
-            placeholders = ",".join("?" for _ in card_ids)
-            rows = cur.execute(
-                f"""
-                SELECT id, reps, next_review FROM cards
-                WHERE id IN ({placeholders})
-            """,
-                card_ids,
-            ).fetchall()
+            if not rows:
+                return []
 
             total_days = (exam_date.date() - now.date()).days
             if total_days <= 0:
@@ -241,6 +267,8 @@ class ExamSchedulerImpl:
 
             return plans
 
+        if conn is not None:
+            return _tx(conn)
         return self.adapter.transaction(_tx)
 
     def get_due_cards(
@@ -288,22 +316,38 @@ class ExamSchedulerImpl:
         due_cards = []
         day_cutoff_utc = self.time.day_cutoff_utc()
 
+        card_ids = [r["id"] for r in card_rows]
+        deck_names_map: dict[int, list[str]] = {}
+        deck_ids_map: dict[int, list[int]] = {}
+
+        if card_ids:
+            placeholders = ",".join("?" for _ in card_ids)
+            deck_rows = self.adapter.execute(
+                f"""
+                SELECT cd.card_id, d.name
+                FROM decks d
+                JOIN card_decks cd ON d.id = cd.deck_id
+                WHERE cd.card_id IN ({placeholders})
+            """,
+                tuple(card_ids),
+            )
+            for row in deck_rows:
+                deck_names_map.setdefault(row["card_id"], []).append(row["name"])
+
+            deck_links = self.adapter.execute(
+                f"""
+                SELECT card_id, deck_id FROM card_decks
+                WHERE card_id IN ({placeholders})
+            """,
+                tuple(card_ids),
+            )
+            for row in deck_links:
+                deck_ids_map.setdefault(row["card_id"], []).append(row["deck_id"])
+
         for r in card_rows:
             c_dict = dict(r)
-            # Fetch deck info for this card
-            deck_rows = self.adapter.execute(
-                """
-                SELECT d.name FROM decks d
-                JOIN card_decks cd ON d.id = cd.deck_id
-                WHERE cd.card_id = ?
-            """,
-                (r["id"],),
-            )
-            c_dict["deck_names"] = [d["name"] for d in deck_rows]
-            deck_links = self.adapter.execute(
-                "SELECT deck_id FROM card_decks WHERE card_id = ?", (r["id"],)
-            )
-            c_dict["deck_ids"] = [d["deck_id"] for d in deck_links]
+            c_dict["deck_names"] = deck_names_map.get(r["id"], [])
+            c_dict["deck_ids"] = deck_ids_map.get(r["id"], [])
 
             reps = r["reps"] or 0
             next_review_str = r["next_review"]
@@ -404,9 +448,19 @@ class ExamSchedulerImpl:
 
                         overlap = [d for d in u_deck_ids if d in remaining_decks]
                         if overlap:
-                            # Redistribute cards for this upcoming exam
-                            plans = self.distribute(u_id, list(overlap), now)
-                            all_plans.extend(plans)
+                            # 找出屬於這些重疊牌組的卡片
+                            placeholders = ",".join("?" for _ in overlap)
+                            card_rows = cur.execute(
+                                f"""
+                                SELECT DISTINCT card_id FROM card_decks
+                                WHERE deck_id IN ({placeholders})
+                            """,
+                                tuple(overlap),
+                            ).fetchall()
+                            card_ids = [c["card_id"] for c in card_rows]
+                            if card_ids:
+                                plans = self.distribute(u_id, card_ids, now, conn=conn)
+                                all_plans.extend(plans)
                             for d in overlap:
                                 remaining_decks.remove(d)
 
@@ -474,6 +528,9 @@ class ExamSchedulerImpl:
             exam_date = self.time.parse_iso(e["date"])
             if not exam_date:
                 exam_date = now
+            e_dict["date"] = exam_date
+            e_dict["processed"] = bool(e["processed"])
+
             delta = exam_date - now
             e_dict["days_remaining"] = delta.days
             e_dict["seconds_remaining"] = int(delta.total_seconds())
@@ -502,14 +559,17 @@ class ExamSchedulerImpl:
         deck_ids: list[int] | None = None,
         folder_ids: list[int] | None = None,
     ) -> int:
+        utc_dt = self.time.parse_iso(date_str)
+        if not utc_dt:
+            raise ValueError("無效的考試日期與時間格式")
+
         def _tx(conn):
             cur = conn.cursor()
-            utc_dt = self.time.parse_iso(date_str)
             date_formatted = self.time.format_iso(utc_dt)
 
             cur.execute(
                 "INSERT INTO exams (name, date) VALUES (?, ?)",
-                (name.strip(), date_formatted),
+                (name.strip()[:500], date_formatted),
             )
             exam_id = cur.lastrowid
 
@@ -530,18 +590,7 @@ class ExamSchedulerImpl:
         exam_id = self.adapter.transaction(_tx)
 
         # Distribute cards for the new exam
-        target_ids: list[int] = (deck_ids or []) + (folder_ids or [])
-        if target_ids:
-            card_rows = self.adapter.execute(
-                """
-                SELECT DISTINCT cd.card_id FROM card_decks cd
-                WHERE cd.deck_id IN ({})
-            """.format(",".join("?" * len(target_ids))),
-                tuple(target_ids),
-            )
-            card_ids = [r["card_id"] for r in card_rows]
-            if card_ids:
-                self.distribute(exam_id, card_ids, self.time.now_utc())
+        self.distribute(exam_id, None, self.time.now_utc())
 
         return exam_id
 
@@ -552,5 +601,121 @@ class ExamSchedulerImpl:
         self.adapter.transaction(_tx)
 
     def import_exams_csv(self, csv_text: str) -> int:
-        # Implementation similar to database.py
-        return 0
+        if not csv_text or not csv_text.strip():
+            return 0
+
+        # 限制大小
+        if len(csv_text) > 1024 * 1024:
+            raise ValueError("CSV 內容過大（最大 1MB）")
+
+        imported_exam_ids: set[int] = set()
+
+        def _tx(conn):
+            cur = conn.cursor()
+            try:
+                reader = csv.reader(io.StringIO(csv_text.strip()))
+            except csv.Error as e:
+                raise ValueError(f"CSV 格式解析失敗：{str(e)}")
+
+            imported_count = 0
+            for row_num, row in enumerate(reader, 1):
+                if not row or len(row) < 4:
+                    continue
+
+                name = row[0].strip()[:500]
+                date_str = row[1].strip()
+                scope_type = row[2].strip().lower()
+                scope_name = row[3].strip()
+
+                if not name or not date_str or not scope_name:
+                    continue
+
+                deck_ids = []
+                folder_ids = []
+
+                if scope_type == "deck":
+                    deck = cur.execute(
+                        "SELECT id FROM decks WHERE name = ?", (scope_name,)
+                    ).fetchone()
+                    if deck:
+                        deck_ids.append(deck["id"])
+                elif scope_type == "folder":
+                    folder = cur.execute(
+                        "SELECT id FROM folders WHERE name = ?", (scope_name,)
+                    ).fetchone()
+                    if folder:
+                        folder_ids.append(folder["id"])
+
+                if not deck_ids and not folder_ids:
+                    continue
+
+                utc_dt = self.time.parse_iso(date_str)
+                if not utc_dt:
+                    continue
+                date_formatted = self.time.format_iso(utc_dt)
+
+                existing = cur.execute(
+                    "SELECT id FROM exams WHERE name = ? AND date = ?",
+                    (name, date_formatted),
+                ).fetchone()
+
+                if existing:
+                    exam_id = existing["id"]
+                    if deck_ids:
+                        for did in deck_ids:
+                            link = cur.execute(
+                                "SELECT 1 FROM exam_decks WHERE exam_id = ? AND deck_id = ?",
+                                (exam_id, did),
+                            ).fetchone()
+                            if not link:
+                                cur.execute(
+                                    "INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)",
+                                    (exam_id, did),
+                                )
+                    if folder_ids:
+                        for fid in folder_ids:
+                            link = cur.execute(
+                                "SELECT 1 FROM exam_folders WHERE exam_id = ? AND folder_id = ?",
+                                (exam_id, fid),
+                            ).fetchone()
+                            if not link:
+                                cur.execute(
+                                    "INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)",
+                                    (exam_id, fid),
+                                )
+                else:
+                    cur.execute(
+                        "INSERT INTO exams (name, date) VALUES (?, ?)",
+                        (name, date_formatted),
+                    )
+                    exam_id = cur.lastrowid
+                    if deck_ids:
+                        for did in deck_ids:
+                            cur.execute(
+                                "INSERT INTO exam_decks (exam_id, deck_id) VALUES (?, ?)",
+                                (exam_id, did),
+                            )
+                    if folder_ids:
+                        for fid in folder_ids:
+                            cur.execute(
+                                "INSERT INTO exam_folders (exam_id, folder_id) VALUES (?, ?)",
+                                (exam_id, fid),
+                            )
+
+                imported_exam_ids.add(exam_id)
+                imported_count += 1
+
+            if imported_count > 0:
+                for eid in imported_exam_ids:
+                    self.distribute(eid, None, self.time.now_utc(), conn=conn)
+
+            return imported_count
+
+        count = self.adapter.transaction(_tx)
+        if count > 0:
+            from domain.events import ExamsImportedEvent
+            from database import _notifier
+
+            _notifier.notify(ExamsImportedEvent(count=count))
+
+        return count

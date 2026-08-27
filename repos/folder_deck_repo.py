@@ -1,5 +1,6 @@
 # repos/folder_deck_repo.py
 from __future__ import annotations
+import sqlite3
 from domain.protocols import DatabaseAdapter, TimeProvider
 from domain.models import FolderWithDecks, DeckRow
 
@@ -70,8 +71,11 @@ class FolderDeckRepoImpl:
     def create_folder(self, name: str) -> int:
         def _tx(conn):
             cur = conn.cursor()
-            cur.execute("INSERT INTO folders (name) VALUES (?)", (name,))
-            return cur.lastrowid
+            try:
+                cur.execute("INSERT INTO folders (name) VALUES (?)", (name.strip(),))
+                return cur.lastrowid
+            except sqlite3.IntegrityError:
+                raise ValueError(f"資料夾「{name.strip()}」已存在！")
 
         return self.adapter.transaction(_tx)
 
@@ -85,8 +89,16 @@ class FolderDeckRepoImpl:
     def create_deck(self, name: str, folder_ids: list[int] | None = None) -> int:
         def _tx(conn):
             cur = conn.cursor()
-            cur.execute("INSERT INTO decks (name) VALUES (?)", (name,))
-            deck_id = cur.lastrowid
+            try:
+                cur.execute(
+                    "INSERT INTO decks (name) VALUES (?, ?)"
+                    if False
+                    else "INSERT INTO decks (name) VALUES (?)",
+                    (name.strip(),),
+                )
+                deck_id = cur.lastrowid
+            except sqlite3.IntegrityError:
+                raise ValueError(f"牌組「{name.strip()}」已存在！")
             if folder_ids:
                 for fid in folder_ids:
                     cur.execute(
@@ -102,7 +114,12 @@ class FolderDeckRepoImpl:
     ) -> None:
         def _tx(conn):
             cur = conn.cursor()
-            cur.execute("UPDATE decks SET name = ? WHERE id = ?", (name, deck_id))
+            try:
+                cur.execute(
+                    "UPDATE decks SET name = ? WHERE id = ?", (name.strip(), deck_id)
+                )
+            except sqlite3.IntegrityError:
+                raise ValueError(f"牌組名稱「{name.strip()}」已被其他牌組使用！")
             cur.execute("DELETE FROM deck_folders WHERE deck_id = ?", (deck_id,))
             if folder_ids:
                 for fid in folder_ids:

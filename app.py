@@ -105,39 +105,43 @@ def index():
 def add_folder():
     form = FolderForm()
     if form.validate_on_submit():
-        db.create_folder(form.name.data)
-        flash("資料夾建立成功！", "success")
-        return redirect(url_for("index"))
+        try:
+            db.create_folder(form.name.data)
+            flash("資料夾建立成功！", "success")
+            return redirect(url_for("index"))
+        except ValueError as e:
+            flash(f"資料夾建立失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f"資料夾建立失敗: {error}", "danger")
-        db.process_expired_exams()
-        folders, unassigned_decks = db.get_folders_with_decks()
-        folders_all = db.get_all_folders()
-        deck_form = DeckForm()
-        deck_form.folders.choices = [(f["id"], f["name"]) for f in folders_all]
-        decks_all = db.get_all_decks()
-        card_form = CardForm()
-        card_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
-        import_form = ImportForm()
-        import_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
-        all_exams = db.get_all_exams()
-        upcoming_exams = [
-            e for e in all_exams if not e["is_expired"] and e["processed"] == 0
-        ]
-        today_stats = db.get_today_summary_stats()
-        return render_template(
-            "index.html",
-            folders=folders,
-            unassigned_decks=unassigned_decks,
-            folder_form=form,
-            deck_form=deck_form,
-            card_form=card_form,
-            import_form=import_form,
-            upcoming_exams=upcoming_exams,
-            today_stats=today_stats,
-        )
+
+    db.process_expired_exams()
+    folders, unassigned_decks = db.get_folders_with_decks()
+    folders_all = db.get_all_folders()
+    deck_form = DeckForm()
+    deck_form.folders.choices = [(f["id"], f["name"]) for f in folders_all]
+    decks_all = db.get_all_decks()
+    card_form = CardForm()
+    card_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
+    import_form = ImportForm()
+    import_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
+    all_exams = db.get_all_exams()
+    upcoming_exams = [
+        e for e in all_exams if not e["is_expired"] and e["processed"] == 0
+    ]
+    today_stats = db.get_today_summary_stats()
+    return render_template(
+        "index.html",
+        folders=folders,
+        unassigned_decks=unassigned_decks,
+        folder_form=form,
+        deck_form=deck_form,
+        card_form=card_form,
+        import_form=import_form,
+        upcoming_exams=upcoming_exams,
+        today_stats=today_stats,
+    )
 
 
 @app.route("/folders/delete/<int:folder_id>", methods=["POST"])
@@ -158,37 +162,41 @@ def add_deck():
     form.folders.choices = [(f["id"], f["name"]) for f in folders_all]
 
     if form.validate_on_submit():
-        db.create_deck(form.name.data, form.folders.data)
-        flash("牌組建立成功！", "success")
-        return redirect(url_for("index"))
+        try:
+            db.create_deck(form.name.data, form.folders.data)
+            flash("牌組建立成功！", "success")
+            return redirect(url_for("index"))
+        except ValueError as e:
+            flash(f"牌組建立失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f"牌組建立失敗: {error}", "danger")
-        db.process_expired_exams()
-        folders, unassigned_decks = db.get_folders_with_decks()
-        folder_form = FolderForm()
-        decks_all = db.get_all_decks()
-        card_form = CardForm()
-        card_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
-        import_form = ImportForm()
-        import_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
-        all_exams = db.get_all_exams()
-        upcoming_exams = [
-            e for e in all_exams if not e["is_expired"] and e["processed"] == 0
-        ]
-        today_stats = db.get_today_summary_stats()
-        return render_template(
-            "index.html",
-            folders=folders,
-            unassigned_decks=unassigned_decks,
-            folder_form=folder_form,
-            deck_form=form,
-            card_form=card_form,
-            import_form=import_form,
-            upcoming_exams=upcoming_exams,
-            today_stats=today_stats,
-        )
+
+    db.process_expired_exams()
+    folders, unassigned_decks = db.get_folders_with_decks()
+    folder_form = FolderForm()
+    decks_all = db.get_all_decks()
+    card_form = CardForm()
+    card_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
+    import_form = ImportForm()
+    import_form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
+    all_exams = db.get_all_exams()
+    upcoming_exams = [
+        e for e in all_exams if not e["is_expired"] and e["processed"] == 0
+    ]
+    today_stats = db.get_today_summary_stats()
+    return render_template(
+        "index.html",
+        folders=folders,
+        unassigned_decks=unassigned_decks,
+        folder_form=folder_form,
+        deck_form=form,
+        card_form=card_form,
+        import_form=import_form,
+        upcoming_exams=upcoming_exams,
+        today_stats=today_stats,
+    )
 
 
 @app.route("/decks/edit/<int:deck_id>", methods=["GET", "POST"])
@@ -208,9 +216,12 @@ def edit_deck(deck_id):
 
     if request.method == "POST":
         if form.validate_on_submit():
-            db.update_deck(deck_id, form.name.data, form.folders.data)
-            flash("牌組更新成功！", "success")
-            return redirect(url_for("index"))
+            try:
+                db.update_deck(deck_id, form.name.data, form.folders.data)
+                flash("牌組更新成功！", "success")
+                return redirect(url_for("index"))
+            except ValueError as e:
+                flash(f"牌組更新失敗: {str(e)}", "danger")
     else:
         form.name.data = deck["name"]
         form.folders.data = db.get_deck_folders(deck_id)
@@ -284,17 +295,20 @@ def add_card():
     form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
 
     if form.validate_on_submit():
-        card_id, merged = db.add_card(
-            form.front.data, form.back.data, form.card_type.data, form.decks.data
-        )
-        if merged:
-            flash("單字已存在，釋義合併成功！", "info")
-        else:
-            flash("單字卡建立成功！", "success")
-        referrer = request.referrer
-        if referrer and is_safe_url(referrer):
-            return redirect(referrer)
-        return redirect(url_for("cards_list"))
+        try:
+            card_id, merged = db.add_card(
+                form.front.data, form.back.data, form.card_type.data, form.decks.data
+            )
+            if merged:
+                flash("單字已存在，釋義合併成功！", "info")
+            else:
+                flash("單字卡建立成功！", "success")
+            referrer = request.referrer
+            if referrer and is_safe_url(referrer):
+                return redirect(referrer)
+            return redirect(url_for("cards_list"))
+        except ValueError as e:
+            flash(f"建立失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -379,14 +393,17 @@ def import_csv():
     form.decks.choices = [(d["id"], d["name"]) for d in decks_all]
 
     if form.validate_on_submit():
-        imported, merged = db.import_csv_data(
-            form.csv_text.data, form.decks.data, form.card_type.data
-        )
-        flash(f"匯入完成！新增: {imported} 筆，合併重複: {merged} 筆。", "success")
-        referrer = request.referrer
-        if referrer and is_safe_url(referrer):
-            return redirect(referrer)
-        return redirect(url_for("cards_list"))
+        try:
+            imported, merged = db.import_csv_data(
+                form.csv_text.data, form.decks.data, form.card_type.data
+            )
+            flash(f"匯入完成！新增: {imported} 筆，合併重複: {merged} 筆。", "success")
+            referrer = request.referrer
+            if referrer and is_safe_url(referrer):
+                return redirect(referrer)
+            return redirect(url_for("cards_list"))
+        except ValueError as e:
+            flash(f"匯入失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -677,11 +694,14 @@ def add_exam():
         if not form.decks.data and not form.folders.data:
             flash("建立失敗：必須至少選擇一個牌組或資料夾作為考試範圍！", "danger")
         else:
-            db.create_exam(
-                form.name.data, form.date.data, form.decks.data, form.folders.data
-            )
-            flash("考試行程建立成功，單字排程已自動調配！", "success")
-            return redirect(url_for("exams_list"))
+            try:
+                db.create_exam(
+                    form.name.data, form.date.data, form.decks.data, form.folders.data
+                )
+                flash("考試行程建立成功，單字排程已自動調配！", "success")
+                return redirect(url_for("exams_list"))
+            except ValueError as e:
+                flash(f"建立失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:
@@ -699,17 +719,21 @@ def add_exam():
 def import_exams():
     form = ExamImportForm()
     if form.validate_on_submit():
-        imported = db.import_exams_csv(form.csv_text.data)
-        if imported > 0:
-            flash(
-                f"成功匯入 {imported} 筆考試行程！相關單字排程已重新配置。", "success"
-            )
-            return redirect(url_for("exams_list"))
-        else:
-            flash(
-                "匯入失敗：沒有可匯入的有效考試行程，請檢查格式或名稱是否正確。",
-                "danger",
-            )
+        try:
+            imported = db.import_exams_csv(form.csv_text.data)
+            if imported > 0:
+                flash(
+                    f"成功匯入 {imported} 筆考試行程！相關單字排程已重新配置。",
+                    "success",
+                )
+                return redirect(url_for("exams_list"))
+            else:
+                flash(
+                    "匯入失敗：沒有可匯入的有效考試行程，請檢查格式或名稱是否正確。",
+                    "danger",
+                )
+        except ValueError as e:
+            flash(f"匯入失敗: {str(e)}", "danger")
     else:
         for field, errors in form.errors.items():
             for error in errors:

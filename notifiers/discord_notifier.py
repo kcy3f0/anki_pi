@@ -75,7 +75,11 @@ class DiscordNotifier:
         elif isinstance(event, CardsImportedEvent):
             return f"📋 批次匯入成功！\n- 新增單字卡：{event.imported} 張\n- 合併重複卡：{event.merged} 張"
         elif isinstance(event, ExamCreatedEvent):
-            return f"📅 新增考試行程通知：\n- 考試：{event.name}\n- 日期：{event.date.astimezone().strftime('%Y/%m/%d')}"
+            if event.date and hasattr(event.date, "astimezone"):
+                date_str = event.date.astimezone().strftime("%Y/%m/%d")
+            else:
+                date_str = str(event.date or "")
+            return f"📅 新增考試行程通知：\n- 考試：{event.name}\n- 日期：{date_str}"
         elif isinstance(event, ExamDeletedEvent):
             return f"🗑️ 考試行程已刪除：{event.name}"
         elif isinstance(event, ExamsImportedEvent):

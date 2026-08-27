@@ -69,9 +69,11 @@ class SystemTimeProvider:
             tz_info = datetime.fromisoformat(f"2020-01-01T00:00:00{tz_part}").tzinfo
             return dt.replace(tzinfo=tz_info).astimezone(timezone.utc)
 
-    def format_iso(self, dt: datetime | None) -> str:
+    def format_iso(self, dt: datetime | str | None) -> str:
         if not dt:
             return ""
+        if isinstance(dt, str):
+            return dt
         return dt.isoformat()
 
 
